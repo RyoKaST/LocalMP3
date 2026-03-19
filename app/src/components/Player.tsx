@@ -49,13 +49,20 @@ export default function Player({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [seekValue, setSeekValue] = useState(0);
+  const isSeeking = useRef(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onTimeUpdate = () => {
+      if (!isSeeking.current) {
+        setCurrentTime(audio.currentTime);
+        setSeekValue(audio.currentTime);
+      }
+    };
     const onDurationChange = () => setDuration(audio.duration);
     const onEnded = () => onTrackEnd();
 
@@ -70,14 +77,21 @@ export default function Player({
     };
   }, [audioRef, onTrackEnd]);
 
-  const handleProgressClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const audio = audioRef.current;
-      const bar = progressRef.current;
-      if (!audio || !bar) return;
-      const rect = bar.getBoundingClientRect();
-      const ratio = (e.clientX - rect.left) / rect.width;
-      audio.currentTime = ratio * audio.duration;
+  const handleSeekStart = useCallback(() => {
+    isSeeking.current = true;
+  }, []);
+
+  const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setSeekValue(val);
+    setCurrentTime(val);
+  }, []);
+
+  const handleSeekEnd = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseFloat(e.target.value);
+      if (audioRef.current) audioRef.current.currentTime = val;
+      isSeeking.current = false;
     },
     [audioRef],
   );
@@ -194,16 +208,18 @@ export default function Player({
 
         <div className="player-progress-container">
           <span className="player-time">{formatTime(currentTime)}</span>
-          <div
-            className="player-progress"
-            ref={progressRef}
-            onClick={handleProgressClick}
-          >
-            <div
-              className="player-progress-fill"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          <input
+            type="range"
+            min="0"
+            max={duration || 0}
+            step="0.1"
+            value={seekValue}
+            onMouseDown={handleSeekStart}
+            onChange={handleSeekChange}
+            onMouseUp={handleSeekEnd}
+            className="progress-slider"
+            style={{ "--progress": `${progress}%` } as React.CSSProperties}
+          />
           <span className="player-time">{formatTime(duration)}</span>
         </div>
       </div>

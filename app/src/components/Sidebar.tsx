@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Playlist } from "../types";
 
 interface SidebarProps {
@@ -15,12 +16,15 @@ export default function Sidebar({
   onCreatePlaylist,
   onDeletePlaylist,
 }: SidebarProps) {
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
   function handleCreate() {
     const name = `Playlist #${playlists.length + 1}`;
     onCreatePlaylist(name);
   }
 
   return (
+    <>
     <div className="sidebar">
       <div className="sidebar-logo">
         <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
@@ -106,7 +110,7 @@ export default function Sidebar({
                 className="sidebar-playlist-delete"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDeletePlaylist(playlist.id);
+                  setPendingDeleteId(playlist.id);
                 }}
               >
                 &times;
@@ -116,5 +120,40 @@ export default function Sidebar({
         </div>
       </div>
     </div>
+
+    {pendingDeleteId && (() => {
+      const playlist = playlists.find((p) => p.id === pendingDeleteId);
+      return (
+        <div className="modal-overlay" onClick={() => setPendingDeleteId(null)}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+            </div>
+            <h2 className="confirm-modal-title">Delete playlist</h2>
+            <p className="confirm-modal-body">
+              Are you sure you want to delete <strong>{playlist?.name}</strong>?<br />
+              This action cannot be undone.
+            </p>
+            <div className="confirm-modal-actions">
+              <button className="confirm-modal-cancel" onClick={() => setPendingDeleteId(null)}>
+                Cancel
+              </button>
+              <button
+                className="confirm-modal-confirm"
+                onClick={() => {
+                  onDeletePlaylist(pendingDeleteId);
+                  setPendingDeleteId(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+    </>
   );
 }

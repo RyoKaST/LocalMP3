@@ -14,6 +14,8 @@
   --text-subdued: #6a6a6a;
   --accent: #1db954;
   --accent-hover: #1ed760;
+  --danger: #e5534b;
+  --danger-hover: #f0605a;
   --player-bg: #181818;
   --sidebar-width: 260px;
   --player-height: 90px;
@@ -40,6 +42,8 @@
   --hover-bg-stronger: rgba(0, 0, 0, 0.14);
   --slider-track: rgba(0, 0, 0, 0.15);
   --border-medium: rgba(0, 0, 0, 0.1);
+  --danger: #d93025;
+  --danger-hover: #e8372e;
 }
 
 body {
@@ -713,6 +717,7 @@ th.sortable.sorted {
   height: 36px;
   border-radius: 3px;
   overflow: hidden;
+  position: relative;
   flex-shrink: 0;
   background: var(--bg-elevated);
   display: flex;
@@ -725,6 +730,17 @@ th.sortable.sorted {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.cover-greyed {
+  filter: grayscale(1) brightness(0.4);
+}
+
+.playing-icon-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* Playing animation */
@@ -1033,6 +1049,100 @@ td.col-actions {
   transform: scale(1.02);
 }
 
+.modal-btn-danger {
+  background: var(--danger);
+}
+
+.modal-btn-danger:hover {
+  background: var(--danger-hover);
+  transform: scale(1.02);
+}
+
+/* ===== Confirm Modal ===== */
+.confirm-modal {
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  width: 340px;
+  max-width: 90vw;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  padding: 32px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.confirm-modal-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.confirm-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.confirm-modal-body {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.confirm-modal-body strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.confirm-modal-cancel,
+.confirm-modal-confirm {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.confirm-modal-cancel {
+  background: var(--bg-highlight);
+  color: var(--text-secondary);
+}
+
+.confirm-modal-cancel:hover {
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+
+.confirm-modal-confirm {
+  background: var(--accent);
+  color: #fff;
+}
+
+.confirm-modal-confirm:hover {
+  background: var(--accent-hover);
+  transform: scale(1.02);
+}
+
 /* ===== Player ===== */
 .player {
   grid-row: 2;
@@ -1179,24 +1289,36 @@ td.col-actions {
   font-variant-numeric: tabular-nums;
 }
 
-.player-progress {
+.progress-slider {
   flex: 1;
   height: 4px;
-  background: var(--slider-track);
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, var(--accent) var(--progress, 0%), var(--slider-track) var(--progress, 0%));
   border-radius: 2px;
+  outline: none;
   cursor: pointer;
-  position: relative;
+  transition: height 0.1s;
 }
 
-.player-progress:hover {
+.progress-slider:hover {
   height: 6px;
 }
 
-.player-progress-fill {
-  height: 100%;
+.progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
   background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.1s linear;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.progress-slider:hover::-webkit-slider-thumb,
+.progress-slider:active::-webkit-slider-thumb {
+  opacity: 1;
 }
 
 .player-volume {

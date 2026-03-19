@@ -19,6 +19,8 @@ pub struct Track {
     cover: Option<String>,
     #[serde(default)]
     lrc_path: Option<String>,
+    #[serde(default)]
+    track_number: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -159,6 +161,7 @@ fn read_track_metadata(path: &std::path::Path, cover_cache: &std::path::Path) ->
         path: path.to_string_lossy().to_string(),
         cover,
         lrc_path,
+        track_number: tag.track(),
     })
 }
 

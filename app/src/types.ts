@@ -6,6 +6,7 @@ export interface Track {
   path: string;
   cover: string | null;
   lrc_path: string | null;
+  track_number: number | null;
 }
 
 export interface LrcLine {

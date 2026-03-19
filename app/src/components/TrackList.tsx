@@ -191,11 +191,12 @@ export default function TrackList({
   const albums = useMemo<Album[]>(() => {
     const map = new Map<string, Album>();
     for (const track of rawTracks) {
-      const key = `${track.album.toLowerCase()}::${track.artist.toLowerCase()}`;
+      const primaryArtist = track.artist.split(";")[0].trim();
+      const key = `${track.album.toLowerCase()}::${primaryArtist.toLowerCase()}`;
       if (!map.has(key)) {
         map.set(key, {
           name: track.album,
-          artist: track.artist,
+          artist: primaryArtist,
           cover: track.cover,
           tracks: [],
           totalDuration: 0,
@@ -211,9 +212,18 @@ export default function TrackList({
     return result;
   }, [rawTracks]);
 
-  const activeAlbum = selectedAlbum
-    ? albums.find((a) => `${a.name.toLowerCase()}::${a.artist.toLowerCase()}` === selectedAlbum) || null
-    : null;
+  const activeAlbum = useMemo(() => {
+    if (!selectedAlbum) return null;
+    const album = albums.find((a) => `${a.name.toLowerCase()}::${a.artist.toLowerCase()}` === selectedAlbum);
+    if (!album) return null;
+    const sortedTracks = [...album.tracks].sort((a, b) => {
+      if (a.track_number == null && b.track_number == null) return 0;
+      if (a.track_number == null) return 1;
+      if (b.track_number == null) return -1;
+      return a.track_number - b.track_number;
+    });
+    return { ...album, tracks: sortedTracks };
+  }, [selectedAlbum, albums]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -379,14 +389,12 @@ export default function TrackList({
                   <td className="col-title">
                     <div className="track-title-cell">
                       <div className="track-cover-small">
-                        {currentTrack?.path === track.path && isPlaying ? (
-                          <span className="playing-icon">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                          </span>
-                        ) : track.cover ? (
-                          <img src={convertFileSrc(track.cover)} alt="" />
+                        {track.cover ? (
+                          <img
+                            src={convertFileSrc(track.cover)}
+                            alt=""
+                            className={currentTrack?.path === track.path ? "cover-greyed" : ""}
+                          />
                         ) : (
                           <svg
                             viewBox="0 0 24 24"
@@ -396,6 +404,19 @@ export default function TrackList({
                           >
                             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
                           </svg>
+                        )}
+                        {currentTrack?.path === track.path && (
+                          isPlaying ? (
+                            <span className="playing-icon playing-icon-overlay">
+                              <span></span>
+                              <span></span>
+                              <span></span>
+                            </span>
+                          ) : (
+                            <svg className="playing-icon-overlay" viewBox="0 0 24 24" width="20" height="20" fill="var(--accent)">
+                              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                            </svg>
+                          )
                         )}
                       </div>
                       <span>{track.title}</span>
