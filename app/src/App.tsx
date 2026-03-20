@@ -31,6 +31,9 @@ function App() {
   const [playlistDeleteBehavior, setPlaylistDeleteBehavior] = useState<PlaylistDeleteBehavior>(
     () => (localStorage.getItem("playlistDeleteBehavior") as PlaylistDeleteBehavior) || "library"
   );
+  const [lyricsCloseOnClickOutside, setLyricsCloseOnClickOutside] = useState(
+    () => localStorage.getItem("lyricsCloseOnClickOutside") !== "false"
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -464,6 +467,11 @@ function App() {
               setPlaylistDeleteBehavior(b);
               localStorage.setItem("playlistDeleteBehavior", b);
             }}
+            lyricsCloseOnClickOutside={lyricsCloseOnClickOutside}
+            onLyricsCloseOnClickOutsideChange={(v) => {
+              setLyricsCloseOnClickOutside(v);
+              localStorage.setItem("lyricsCloseOnClickOutside", String(v));
+            }}
           />
         ) : (
           <TrackList
@@ -495,6 +503,7 @@ function App() {
           lrcPath={currentTrack.lrc_path}
           trackPath={currentTrack.path}
           audioRef={audioRef}
+          closeOnClickOutside={lyricsCloseOnClickOutside}
           onChangeLrc={handlePickLrc}
           onUnlinkLrc={handleUnlinkLrc}
           onClose={() => setLyricsVisible(false)}

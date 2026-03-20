@@ -1997,6 +1997,51 @@ td.col-actions {
   line-height: 1.4;
 }
 
+.settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-toggle:hover {
+  background: var(--hover-bg);
+}
+
+.settings-toggle-switch {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--slider-track);
+  flex-shrink: 0;
+  position: relative;
+  margin-top: 1px;
+  transition: background 0.2s;
+}
+
+.settings-toggle-switch.active {
+  background: var(--accent);
+}
+
+.settings-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.settings-toggle-switch.active .settings-toggle-knob {
+  transform: translateX(16px);
+}
+
 .settings-theme-toggle {
   display: flex;
   gap: 8px;

@@ -9,6 +9,7 @@ interface SettingsProps {
   libraryPaths: string[];
   tracks: Track[];
   playlistDeleteBehavior: PlaylistDeleteBehavior;
+  lyricsCloseOnClickOutside: boolean;
   onAccentChange: (color: string) => void;
   onThemeChange: (theme: "dark" | "light") => void;
   onAddFolder: () => void;
@@ -16,6 +17,7 @@ interface SettingsProps {
   onRefreshLibrary: () => void;
   onDeleteTrack: (trackPath: string) => void;
   onPlaylistDeleteBehaviorChange: (behavior: PlaylistDeleteBehavior) => void;
+  onLyricsCloseOnClickOutsideChange: (value: boolean) => void;
 }
 
 const ACCENT_PRESETS = [
@@ -71,6 +73,8 @@ export default function Settings({
   onDeleteTrack,
   playlistDeleteBehavior,
   onPlaylistDeleteBehaviorChange,
+  lyricsCloseOnClickOutside,
+  onLyricsCloseOnClickOutsideChange,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("directories");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
@@ -325,6 +329,19 @@ export default function Settings({
                   </div>
                 </label>
               </div>
+            </div>
+
+            <div className="settings-group">
+              <h3 className="settings-group-title">Lyrics Panel</h3>
+              <label className="settings-toggle" onClick={() => onLyricsCloseOnClickOutsideChange(!lyricsCloseOnClickOutside)}>
+                <div className={`settings-toggle-switch${lyricsCloseOnClickOutside ? " active" : ""}`}>
+                  <span className="settings-toggle-knob" />
+                </div>
+                <div className="settings-radio-text">
+                  <span className="settings-radio-label">Close on click outside</span>
+                  <span className="settings-radio-desc">Close the lyrics panel when clicking anywhere outside of it</span>
+                </div>
+              </label>
             </div>
           </div>
         )}

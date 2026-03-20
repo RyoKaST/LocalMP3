@@ -6,17 +6,19 @@ interface LyricsProps {
   lrcPath: string;
   trackPath: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  closeOnClickOutside: boolean;
   onChangeLrc: () => void;
   onUnlinkLrc: () => void;
   onClose: () => void;
 }
 
-export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUnlinkLrc, onClose }: LyricsProps) {
+export default function Lyrics({ lrcPath, trackPath, audioRef, closeOnClickOutside, onChangeLrc, onUnlinkLrc, onClose }: LyricsProps) {
   const [lines, setLines] = useState<LrcLine[]>([]);
   const [currentLine, setCurrentLine] = useState(-1);
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -71,8 +73,19 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUn
     }
   }, [currentLine]);
 
+  useEffect(() => {
+    if (!closeOnClickOutside) return;
+    function handleClick(e: MouseEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [closeOnClickOutside, onClose]);
+
   return (
-    <div className="lyrics-panel">
+    <div className="lyrics-panel" ref={panelRef}>
       <div className="lyrics-header">
         <span className="lyrics-title">Lyrics</span>
         <div className="lyrics-actions">
