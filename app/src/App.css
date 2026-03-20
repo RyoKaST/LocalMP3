@@ -1406,10 +1406,28 @@ td.col-actions {
   cursor: pointer;
 }
 
-/* ===== LRC Creator ===== */
+/* ===== LRC Manager ===== */
 .lrc-creator {
   padding: 24px 32px;
   max-width: 800px;
+}
+
+.lrc-lib-link {
+  margin-left: auto;
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.lrc-lib-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .lrc-textarea {
