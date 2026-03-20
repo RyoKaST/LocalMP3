@@ -19,6 +19,7 @@ interface PlayerProps {
   lyricsVisible: boolean;
   onLyricsToggle: () => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  playSource: string | null;
 }
 
 function formatTime(secs: number): string {
@@ -45,6 +46,7 @@ export default function Player({
   lyricsVisible,
   onLyricsToggle,
   audioRef,
+  playSource,
 }: PlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -126,6 +128,7 @@ export default function Player({
             <div className="player-track-text">
               <div className="player-track-name">{currentTrack.title}</div>
               <div className="player-track-artist">{currentTrack.artist}</div>
+              {playSource && <div className="player-source">{playSource}</div>}
             </div>
           </>
         ) : (

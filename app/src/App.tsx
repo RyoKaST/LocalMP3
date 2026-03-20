@@ -6,7 +6,7 @@ import Sidebar from "./components/Sidebar";
 import TrackList from "./components/TrackList";
 import Player from "./components/Player";
 import EditTrackModal from "./components/EditTrackModal";
-import Settings from "./components/Settings";
+import Settings, { type PlaylistDeleteBehavior } from "./components/Settings";
 import LrcCreator from "./components/LrcCreator";
 import Lyrics from "./components/Lyrics";
 import { Track, Playlist } from "./types";
@@ -24,9 +24,13 @@ function App() {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<"off" | "all" | "one">("off");
   const [lyricsVisible, setLyricsVisible] = useState(false);
+  const [playSource, setPlaySource] = useState<string | null>(null);
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("accentColor") || "#1db954");
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("theme") as "dark" | "light") || "dark");
   const [libraryPaths, setLibraryPaths] = useState<string[]>([]);
+  const [playlistDeleteBehavior, setPlaylistDeleteBehavior] = useState<PlaylistDeleteBehavior>(
+    () => (localStorage.getItem("playlistDeleteBehavior") as PlaylistDeleteBehavior) || "library"
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -110,7 +114,7 @@ function App() {
     }
   }
 
-  function playTrack(track: Track, trackQueue: Track[]) {
+  function playTrack(track: Track, trackQueue: Track[], source: string) {
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -118,6 +122,7 @@ function App() {
     setQueue(trackQueue);
     setQueueIndex(idx >= 0 ? idx : 0);
     setCurrentTrack(track);
+    setPlaySource(source);
 
     audio.src = convertFileSrc(track.path);
     audio.play().then(() => setIsPlaying(true)).catch(console.error);
@@ -220,8 +225,42 @@ function App() {
   async function handleDeletePlaylist(id: string) {
     try {
       await invoke("delete_playlist", { id });
-      setPlaylists((prev) => prev.filter((p) => p.id !== id));
+      const deletedPlaylist = playlists.find((p) => p.id === id);
+      const updatedPlaylists = playlists.filter((p) => p.id !== id);
+      setPlaylists(updatedPlaylists);
       if (currentView === id) setCurrentView("library");
+
+      // Handle currently playing track if it was playing from this playlist
+      if (currentTrack && playSource === deletedPlaylist?.name) {
+        if (playlistDeleteBehavior === "stop") {
+          audioRef.current?.pause();
+          setCurrentTrack(null);
+          setIsPlaying(false);
+          setQueue([]);
+          setPlaySource(null);
+        } else if (playlistDeleteBehavior === "find-playlist") {
+          const alt = updatedPlaylists.find((p) =>
+            p.tracks.some((t) => t.path === currentTrack.path)
+          );
+          if (alt) {
+            setQueue(alt.tracks);
+            const idx = alt.tracks.findIndex((t) => t.path === currentTrack.path);
+            setQueueIndex(idx >= 0 ? idx : 0);
+            setPlaySource(alt.name);
+          } else {
+            setQueue(tracks);
+            const idx = tracks.findIndex((t) => t.path === currentTrack.path);
+            setQueueIndex(idx >= 0 ? idx : 0);
+            setPlaySource("Library");
+          }
+        } else {
+          // "library"
+          setQueue(tracks);
+          const idx = tracks.findIndex((t) => t.path === currentTrack.path);
+          setQueueIndex(idx >= 0 ? idx : 0);
+          setPlaySource("Library");
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -416,6 +455,11 @@ function App() {
             onRemoveFolder={removeFolder}
             onRefreshLibrary={() => scanAllPaths(libraryPaths)}
             onDeleteTrack={handleDeleteTrack}
+            playlistDeleteBehavior={playlistDeleteBehavior}
+            onPlaylistDeleteBehaviorChange={(b) => {
+              setPlaylistDeleteBehavior(b);
+              localStorage.setItem("playlistDeleteBehavior", b);
+            }}
           />
         ) : (
           <TrackList
@@ -474,6 +518,7 @@ function App() {
           }
         }}
         audioRef={audioRef}
+        playSource={playSource}
       />
     </div>
   );

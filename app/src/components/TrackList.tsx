@@ -8,7 +8,7 @@ interface TrackListProps {
   currentTrack: Track | null;
   isPlaying: boolean;
   playlists: Playlist[];
-  onPlay: (track: Track, queue: Track[]) => void;
+  onPlay: (track: Track, queue: Track[], source: string) => void;
   onAddToPlaylist: (playlistId: string, track: Track) => void;
   onRemoveFromPlaylist: (playlistId: string, trackPath: string) => void;
   onUpdatePlaylist: (id: string, name?: string, cover?: string) => void;
@@ -435,7 +435,7 @@ export default function TrackList({
                 <tr
                   key={track.path + index}
                   className={`tracklist-row ${currentTrack?.path === track.path ? "playing" : ""}`}
-                  onDoubleClick={() => onPlay(track, displayTracks)}
+                  onDoubleClick={() => onPlay(track, displayTracks, playlist ? playlist.name : "Library")}
                   onContextMenu={(e) => handleContextMenu(track, e)}
                 >
                   <td className="col-title">
@@ -535,7 +535,7 @@ export default function TrackList({
                       className="album-card-play"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (album.tracks.length > 0) onPlay(album.tracks[0], album.tracks);
+                        if (album.tracks.length > 0) onPlay(album.tracks[0], album.tracks, album.name);
                       }}
                     >
                       <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
@@ -596,7 +596,7 @@ export default function TrackList({
                 <tr
                   key={track.path}
                   className={`tracklist-row ${currentTrack?.path === track.path ? "playing" : ""}`}
-                  onDoubleClick={() => onPlay(track, activeAlbum.tracks)}
+                  onDoubleClick={() => onPlay(track, activeAlbum.tracks, activeAlbum.name)}
                   onContextMenu={(e) => handleContextMenu(track, e)}
                 >
                   <td className="col-num">

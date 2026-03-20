@@ -1,17 +1,21 @@
 import { useState, useMemo } from "react";
 import { Track } from "../types";
 
+export type PlaylistDeleteBehavior = "find-playlist" | "library" | "stop";
+
 interface SettingsProps {
   accentColor: string;
   theme: "dark" | "light";
   libraryPaths: string[];
   tracks: Track[];
+  playlistDeleteBehavior: PlaylistDeleteBehavior;
   onAccentChange: (color: string) => void;
   onThemeChange: (theme: "dark" | "light") => void;
   onAddFolder: () => void;
   onRemoveFolder: (path: string) => void;
   onRefreshLibrary: () => void;
   onDeleteTrack: (trackPath: string) => void;
+  onPlaylistDeleteBehaviorChange: (behavior: PlaylistDeleteBehavior) => void;
 }
 
 const ACCENT_PRESETS = [
@@ -25,7 +29,7 @@ const ACCENT_PRESETS = [
   { name: "Teal", value: "#38b2ac" },
 ];
 
-type Tab = "appearances" | "directories" | "duplicates";
+type Tab = "appearances" | "directories" | "experience" | "duplicates";
 
 function getParentDir(filePath: string, libraryPaths: string[]): string {
   for (const lp of libraryPaths) {
@@ -65,6 +69,8 @@ export default function Settings({
   onRemoveFolder,
   onRefreshLibrary,
   onDeleteTrack,
+  playlistDeleteBehavior,
+  onPlaylistDeleteBehaviorChange,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("appearances");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
@@ -154,6 +160,12 @@ export default function Settings({
           onClick={() => setActiveTab("directories")}
         >
           Directories
+        </button>
+        <button
+          className={`settings-tab ${activeTab === "experience" ? "active" : ""}`}
+          onClick={() => setActiveTab("experience")}
+        >
+          Experience
         </button>
         <button
           className={`settings-tab ${activeTab === "duplicates" ? "active" : ""}`}
@@ -269,6 +281,49 @@ export default function Settings({
                     Refresh
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "experience" && (
+          <div className="settings-section">
+            <div className="settings-group">
+              <h3 className="settings-group-title">Playlist Deletion</h3>
+              <p className="settings-description">
+                What should happen to the currently playing track when its playlist is deleted?
+              </p>
+              <div className="settings-radio-group">
+                <label
+                  className={`settings-radio${playlistDeleteBehavior === "find-playlist" ? " active" : ""}`}
+                  onClick={() => onPlaylistDeleteBehaviorChange("find-playlist")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Find another playlist</span>
+                    <span className="settings-radio-desc">Switch to another playlist that contains the track, or fall back to library</span>
+                  </div>
+                </label>
+                <label
+                  className={`settings-radio${playlistDeleteBehavior === "library" ? " active" : ""}`}
+                  onClick={() => onPlaylistDeleteBehaviorChange("library")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Continue from library</span>
+                    <span className="settings-radio-desc">Keep playing the track but switch context to the song library</span>
+                  </div>
+                </label>
+                <label
+                  className={`settings-radio${playlistDeleteBehavior === "stop" ? " active" : ""}`}
+                  onClick={() => onPlaylistDeleteBehaviorChange("stop")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Stop playback</span>
+                    <span className="settings-radio-desc">Immediately stop the current track</span>
+                  </div>
+                </label>
               </div>
             </div>
           </div>
