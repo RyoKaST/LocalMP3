@@ -6,9 +6,10 @@ import Sidebar from "./components/Sidebar";
 import TrackList from "./components/TrackList";
 import Player from "./components/Player";
 import EditTrackModal from "./components/EditTrackModal";
-import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior } from "./components/Settings";
+import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior, type FullscreenLayout, type FullscreenBackground, type FullscreenControls } from "./components/Settings";
 import LrcCreator from "./components/LrcCreator";
 import Lyrics from "./components/Lyrics";
+import FullscreenPlayer from "./components/FullscreenPlayer";
 import { Track, Playlist } from "./types";
 import "./App.css";
 
@@ -38,6 +39,16 @@ function App() {
     () => (localStorage.getItem("libraryClickBehavior") as LibraryClickBehavior) || "keep"
   );
   const [libraryResetKey, setLibraryResetKey] = useState(0);
+  const [fullscreenVisible, setFullscreenVisible] = useState(false);
+  const [fullscreenLayout, setFullscreenLayout] = useState<FullscreenLayout>(
+    () => (localStorage.getItem("fullscreenLayout") as FullscreenLayout) || "side-by-side"
+  );
+  const [fullscreenBackground, setFullscreenBackground] = useState<FullscreenBackground>(
+    () => (localStorage.getItem("fullscreenBackground") as FullscreenBackground) || "blurred-cover"
+  );
+  const [fullscreenControls, setFullscreenControls] = useState<FullscreenControls>(
+    () => (localStorage.getItem("fullscreenControls") as FullscreenControls) || "auto-hide"
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -484,6 +495,21 @@ function App() {
               setLibraryClickBehavior(b);
               localStorage.setItem("libraryClickBehavior", b);
             }}
+            fullscreenLayout={fullscreenLayout}
+            fullscreenBackground={fullscreenBackground}
+            fullscreenControls={fullscreenControls}
+            onFullscreenLayoutChange={(l) => {
+              setFullscreenLayout(l);
+              localStorage.setItem("fullscreenLayout", l);
+            }}
+            onFullscreenBackgroundChange={(b) => {
+              setFullscreenBackground(b);
+              localStorage.setItem("fullscreenBackground", b);
+            }}
+            onFullscreenControlsChange={(c) => {
+              setFullscreenControls(c);
+              localStorage.setItem("fullscreenControls", c);
+            }}
           />
         ) : (
           <TrackList
@@ -547,7 +573,25 @@ function App() {
         }}
         audioRef={audioRef}
         playSource={playSource}
+        onCoverClick={() => {
+          if (currentTrack) setFullscreenVisible(true);
+        }}
       />
+      {fullscreenVisible && currentTrack && (
+        <FullscreenPlayer
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          shuffle={shuffle}
+          repeat={repeat}
+          audioRef={audioRef}
+          onPlayPause={togglePlayPause}
+          onNext={playNext}
+          onPrev={playPrev}
+          onShuffleToggle={() => setShuffle((s) => !s)}
+          onRepeatCycle={() => setRepeat((r) => r === "off" ? "all" : r === "all" ? "one" : "off")}
+          onClose={() => setFullscreenVisible(false)}
+        />
+      )}
     </div>
   );
 }

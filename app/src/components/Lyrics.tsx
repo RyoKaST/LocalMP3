@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { LrcLine } from "../types";
+import { useEffect, useRef } from "react";
+import { useLyricsSync } from "../hooks/useLyricsSync";
 
 interface LyricsProps {
   lrcPath: string;
@@ -13,57 +12,14 @@ interface LyricsProps {
 }
 
 export default function Lyrics({ lrcPath, trackPath, audioRef, closeOnClickOutside, onChangeLrc, onUnlinkLrc, onClose }: LyricsProps) {
-  const [lines, setLines] = useState<LrcLine[]>([]);
-  const [currentLine, setCurrentLine] = useState(-1);
-  const [speed, setSpeed] = useState(1);
-  const speedRef = useRef(1);
+  const { lines, currentLine, speed, setSpeed, resetSpeed, seekToLine } = useLyricsSync({
+    lrcPath,
+    trackPath,
+    audioRef,
+  });
+
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    invoke<LrcLine[]>("read_lrc", { lrcPath })
-      .then(setLines)
-      .catch(() => setLines([]));
-  }, [lrcPath]);
-
-  // Load saved speed when track changes
-  useEffect(() => {
-    invoke<number>("get_lrc_speed", { trackPath }).then((s) => {
-      setSpeed(s);
-      speedRef.current = s;
-    });
-  }, [trackPath]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || lines.length === 0) return;
-
-    let rafId: number;
-    let lastIdx = -1;
-    // Lookahead offset: show lyrics slightly ahead of the timestamp
-    // to compensate for audio buffering and natural reading delay
-    const LOOKAHEAD = 0.3;
-
-    function tick() {
-      const t = audio!.currentTime * speedRef.current + LOOKAHEAD;
-      let idx = -1;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (t >= lines[i].time) {
-          idx = i;
-          break;
-        }
-      }
-      if (idx !== lastIdx) {
-        lastIdx = idx;
-        setCurrentLine(idx);
-      }
-      rafId = requestAnimationFrame(tick);
-    }
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [audioRef, lines]);
 
   useEffect(() => {
     if (currentLine < 0 || !containerRef.current) return;
@@ -118,27 +74,14 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, closeOnClickOutsi
           max="2"
           step="0.05"
           value={speed}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            setSpeed(v);
-            speedRef.current = v;
-            // Debounce save to avoid spamming during drag
-            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = setTimeout(() => {
-              invoke("set_lrc_speed", { trackPath, speed: v });
-            }, 300);
-          }}
+          onChange={(e) => setSpeed(parseFloat(e.target.value))}
           className="lyrics-speed-slider"
         />
         <span className="lyrics-speed-value">{speed.toFixed(2)}x</span>
         {speed !== 1 && (
           <button
             className="lyrics-speed-reset"
-            onClick={() => {
-              setSpeed(1);
-              speedRef.current = 1;
-              invoke("set_lrc_speed", { trackPath, speed: 1.0 });
-            }}
+            onClick={resetSpeed}
           >
             Reset
           </button>
@@ -152,10 +95,7 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, closeOnClickOutsi
             <div
               key={i}
               className={`lyrics-line${i === currentLine ? " active" : ""}`}
-              onClick={() => {
-                const audio = audioRef.current;
-                if (audio) audio.currentTime = line.time / speedRef.current;
-              }}
+              onClick={() => seekToLine(i)}
             >
               {line.text}
             </div>

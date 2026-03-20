@@ -35,6 +35,9 @@ function hsvToHex(h: number, s: number, v: number): string {
 
 export type PlaylistDeleteBehavior = "find-playlist" | "library" | "stop";
 export type LibraryClickBehavior = "songs" | "albums" | "keep";
+export type FullscreenLayout = "side-by-side" | "cover" | "karaoke";
+export type FullscreenBackground = "blurred-cover" | "color-gradient" | "dark-accent";
+export type FullscreenControls = "full" | "minimal" | "auto-hide";
 
 interface SettingsProps {
   accentColor: string;
@@ -53,6 +56,12 @@ interface SettingsProps {
   onPlaylistDeleteBehaviorChange: (behavior: PlaylistDeleteBehavior) => void;
   onLyricsCloseOnClickOutsideChange: (value: boolean) => void;
   onLibraryClickBehaviorChange: (behavior: LibraryClickBehavior) => void;
+  fullscreenLayout: FullscreenLayout;
+  fullscreenBackground: FullscreenBackground;
+  fullscreenControls: FullscreenControls;
+  onFullscreenLayoutChange: (layout: FullscreenLayout) => void;
+  onFullscreenBackgroundChange: (bg: FullscreenBackground) => void;
+  onFullscreenControlsChange: (controls: FullscreenControls) => void;
 }
 
 const ACCENT_PRESETS = [
@@ -228,6 +237,12 @@ export default function Settings({
   onLyricsCloseOnClickOutsideChange,
   libraryClickBehavior,
   onLibraryClickBehaviorChange,
+  fullscreenLayout,
+  fullscreenBackground,
+  fullscreenControls,
+  onFullscreenLayoutChange,
+  onFullscreenBackgroundChange,
+  onFullscreenControlsChange,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("directories");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
@@ -523,6 +538,54 @@ export default function Settings({
                     <span className="settings-radio-label">Always show Albums</span>
                     <span className="settings-radio-desc">Reset to the Albums tab every time</span>
                   </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="settings-group">
+              <h3 className="settings-group-title">Fullscreen Player</h3>
+              <p className="settings-description">
+                Customize the fullscreen player appearance. Click the cover art in the player to enter fullscreen.
+              </p>
+
+              <div className="settings-select-group">
+                <label className="settings-select-label">
+                  <span className="settings-select-text">Layout</span>
+                  <select
+                    className="settings-select"
+                    value={fullscreenLayout}
+                    onChange={(e) => onFullscreenLayoutChange(e.target.value as FullscreenLayout)}
+                  >
+                    <option value="side-by-side">Side by Side</option>
+                    <option value="cover">Cover</option>
+                    <option value="karaoke">Karaoke</option>
+                  </select>
+                </label>
+
+                <label className="settings-select-label">
+                  <span className="settings-select-text">Background</span>
+                  <select
+                    className="settings-select"
+                    value={fullscreenBackground}
+                    onChange={(e) => onFullscreenBackgroundChange(e.target.value as FullscreenBackground)}
+                  >
+                    <option value="blurred-cover">Blurred Cover</option>
+                    <option value="color-gradient">Color Gradient</option>
+                    <option value="dark-accent">Dark Glow</option>
+                  </select>
+                </label>
+
+                <label className="settings-select-label">
+                  <span className="settings-select-text">Controls</span>
+                  <select
+                    className="settings-select"
+                    value={fullscreenControls}
+                    onChange={(e) => onFullscreenControlsChange(e.target.value as FullscreenControls)}
+                  >
+                    <option value="full">Full</option>
+                    <option value="minimal">Minimal</option>
+                    <option value="auto-hide">Auto-hide</option>
+                  </select>
                 </label>
               </div>
             </div>
