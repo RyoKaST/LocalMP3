@@ -654,7 +654,7 @@ th.sortable.sorted {
 }
 
 .tracklist-row.playing {
-  background: rgba(29, 185, 84, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .tracklist-row td {
