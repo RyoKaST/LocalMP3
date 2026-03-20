@@ -34,6 +34,7 @@ function hsvToHex(h: number, s: number, v: number): string {
 }
 
 export type PlaylistDeleteBehavior = "find-playlist" | "library" | "stop";
+export type LibraryClickBehavior = "songs" | "albums" | "keep";
 
 interface SettingsProps {
   accentColor: string;
@@ -42,6 +43,7 @@ interface SettingsProps {
   tracks: Track[];
   playlistDeleteBehavior: PlaylistDeleteBehavior;
   lyricsCloseOnClickOutside: boolean;
+  libraryClickBehavior: LibraryClickBehavior;
   onAccentChange: (color: string) => void;
   onThemeChange: (theme: "dark" | "light") => void;
   onAddFolder: () => void;
@@ -50,6 +52,7 @@ interface SettingsProps {
   onDeleteTrack: (trackPath: string) => void;
   onPlaylistDeleteBehaviorChange: (behavior: PlaylistDeleteBehavior) => void;
   onLyricsCloseOnClickOutsideChange: (value: boolean) => void;
+  onLibraryClickBehaviorChange: (behavior: LibraryClickBehavior) => void;
 }
 
 const ACCENT_PRESETS = [
@@ -223,6 +226,8 @@ export default function Settings({
   onPlaylistDeleteBehaviorChange,
   lyricsCloseOnClickOutside,
   onLyricsCloseOnClickOutsideChange,
+  libraryClickBehavior,
+  onLibraryClickBehaviorChange,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("directories");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
@@ -481,6 +486,45 @@ export default function Settings({
                   <span className="settings-radio-desc">Close the lyrics panel when clicking anywhere outside of it</span>
                 </div>
               </label>
+            </div>
+
+            <div className="settings-group">
+              <h3 className="settings-group-title">Library Navigation</h3>
+              <p className="settings-description">
+                What happens when you click "Library" in the sidebar?
+              </p>
+              <div className="settings-radio-group">
+                <label
+                  className={`settings-radio${libraryClickBehavior === "keep" ? " active" : ""}`}
+                  onClick={() => onLibraryClickBehaviorChange("keep")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Stay on current tab</span>
+                    <span className="settings-radio-desc">Keep the Songs/Albums tab, but exit album detail view</span>
+                  </div>
+                </label>
+                <label
+                  className={`settings-radio${libraryClickBehavior === "songs" ? " active" : ""}`}
+                  onClick={() => onLibraryClickBehaviorChange("songs")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Always show Songs</span>
+                    <span className="settings-radio-desc">Reset to the Songs tab every time</span>
+                  </div>
+                </label>
+                <label
+                  className={`settings-radio${libraryClickBehavior === "albums" ? " active" : ""}`}
+                  onClick={() => onLibraryClickBehaviorChange("albums")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Always show Albums</span>
+                    <span className="settings-radio-desc">Reset to the Albums tab every time</span>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
         )}

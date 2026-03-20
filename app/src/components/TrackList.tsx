@@ -2,12 +2,16 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Track, Playlist } from "../types";
 
+type LibraryClickBehavior = "songs" | "albums" | "keep";
+
 interface TrackListProps {
   tracks: Track[];
   playlist: Playlist | null;
   currentTrack: Track | null;
   isPlaying: boolean;
   playlists: Playlist[];
+  libraryClickBehavior: LibraryClickBehavior;
+  libraryResetKey: number;
   onPlay: (track: Track, queue: Track[], source: string) => void;
   onAddToPlaylist: (playlistId: string, track: Track) => void;
   onRemoveFromPlaylist: (playlistId: string, trackPath: string) => void;
@@ -189,6 +193,8 @@ export default function TrackList({
   onPickCover,
   onEditTrack,
   onLinkLrc,
+  libraryClickBehavior,
+  libraryResetKey,
 }: TrackListProps) {
   const [sortKey, setSortKey] = useState<SortKey>("title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -215,6 +221,25 @@ export default function TrackList({
   const [nameError, setNameError] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("songs");
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const lastResetKey = useRef(libraryResetKey);
+
+  // Handle Library sidebar click
+  useEffect(() => {
+    if (libraryResetKey === lastResetKey.current) return;
+    lastResetKey.current = libraryResetKey;
+    if (!playlist) {
+      if (libraryClickBehavior === "songs") {
+        setViewMode("songs");
+        setSelectedAlbum(null);
+      } else if (libraryClickBehavior === "albums") {
+        setViewMode("albums");
+        setSelectedAlbum(null);
+      } else {
+        // "keep" — stay on current tab but exit album detail
+        setSelectedAlbum(null);
+      }
+    }
+  }, [libraryResetKey, libraryClickBehavior, playlist]);
 
   const albums = useMemo<Album[]>(() => {
     const map = new Map<string, Album>();

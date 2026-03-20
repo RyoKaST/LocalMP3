@@ -77,6 +77,9 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, closeOnClickOutsi
     if (!closeOnClickOutside) return;
     function handleClick(e: MouseEvent) {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        // Don't close if clicking the lyrics toggle button in the player
+        const target = e.target as HTMLElement;
+        if (target.closest("[data-lyrics-toggle]")) return;
         onClose();
       }
     }

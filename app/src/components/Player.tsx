@@ -232,6 +232,7 @@ export default function Player({
           <button
             className={`player-btn player-btn-mode${hasLrc && lyricsVisible ? " active" : ""}`}
             onClick={onLyricsToggle}
+            data-lyrics-toggle
             title={hasLrc ? "Toggle lyrics" : "Link LRC file"}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">

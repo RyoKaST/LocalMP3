@@ -6,7 +6,7 @@ import Sidebar from "./components/Sidebar";
 import TrackList from "./components/TrackList";
 import Player from "./components/Player";
 import EditTrackModal from "./components/EditTrackModal";
-import Settings, { type PlaylistDeleteBehavior } from "./components/Settings";
+import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior } from "./components/Settings";
 import LrcCreator from "./components/LrcCreator";
 import Lyrics from "./components/Lyrics";
 import { Track, Playlist } from "./types";
@@ -34,6 +34,10 @@ function App() {
   const [lyricsCloseOnClickOutside, setLyricsCloseOnClickOutside] = useState(
     () => localStorage.getItem("lyricsCloseOnClickOutside") !== "false"
   );
+  const [libraryClickBehavior, setLibraryClickBehavior] = useState<LibraryClickBehavior>(
+    () => (localStorage.getItem("libraryClickBehavior") as LibraryClickBehavior) || "keep"
+  );
+  const [libraryResetKey, setLibraryResetKey] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -443,7 +447,10 @@ function App() {
       <Sidebar
         playlists={playlists}
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={(view) => {
+          setCurrentView(view);
+          if (view === "library") setLibraryResetKey((k) => k + 1);
+        }}
         onCreatePlaylist={handleCreatePlaylist}
         onDeletePlaylist={handleDeletePlaylist}
       />
@@ -472,6 +479,11 @@ function App() {
               setLyricsCloseOnClickOutside(v);
               localStorage.setItem("lyricsCloseOnClickOutside", String(v));
             }}
+            libraryClickBehavior={libraryClickBehavior}
+            onLibraryClickBehaviorChange={(b) => {
+              setLibraryClickBehavior(b);
+              localStorage.setItem("libraryClickBehavior", b);
+            }}
           />
         ) : (
           <TrackList
@@ -487,6 +499,8 @@ function App() {
             onPickCover={handlePickCover}
             onEditTrack={setEditingTrack}
             onLinkLrc={handleLinkLrcForTrack}
+            libraryClickBehavior={libraryClickBehavior}
+            libraryResetKey={libraryResetKey}
           />
         )}
       </main>
