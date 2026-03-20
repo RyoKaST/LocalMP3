@@ -414,6 +414,7 @@ function App() {
             onThemeChange={setTheme}
             onAddFolder={addFolder}
             onRemoveFolder={removeFolder}
+            onRefreshLibrary={() => scanAllPaths(libraryPaths)}
             onDeleteTrack={handleDeleteTrack}
           />
         ) : (

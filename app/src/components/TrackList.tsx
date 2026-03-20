@@ -176,8 +176,20 @@ export default function TrackList({
 }: TrackListProps) {
   const [sortKey, setSortKey] = useState<SortKey>("title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [searchQuery, setSearchQuery] = useState("");
   const rawTracks = playlist ? playlist.tracks : tracks;
-  const displayTracks = sortTracks(rawTracks, sortKey, sortDir);
+
+  const filteredTracks = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return rawTracks;
+    return rawTracks.filter((t) =>
+      t.title.toLowerCase().includes(q) ||
+      t.artist.toLowerCase().includes(q) ||
+      t.album.toLowerCase().includes(q)
+    );
+  }, [rawTracks, searchQuery]);
+
+  const displayTracks = sortTracks(filteredTracks, sortKey, sortDir);
   const [contextMenu, setContextMenu] = useState<{
     track: Track;
     x: number;
@@ -190,7 +202,7 @@ export default function TrackList({
 
   const albums = useMemo<Album[]>(() => {
     const map = new Map<string, Album>();
-    for (const track of rawTracks) {
+    for (const track of filteredTracks) {
       const primaryArtist = track.artist.split(";")[0].trim();
       const key = `${track.album.toLowerCase()}::${primaryArtist.toLowerCase()}`;
       if (!map.has(key)) {
@@ -210,7 +222,7 @@ export default function TrackList({
     const result = [...map.values()];
     result.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
     return result;
-  }, [rawTracks]);
+  }, [filteredTracks]);
 
   const activeAlbum = useMemo(() => {
     if (!selectedAlbum) return null;
@@ -320,6 +332,26 @@ export default function TrackList({
               {playlist.tracks.length !== 1 ? "s" : ""}
             </span>
           </div>
+          <div className="tracklist-search-wrapper">
+            <div className="tracklist-search">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button className="tracklist-search-clear" onClick={() => setSearchQuery("")}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="tracklist-header">
@@ -327,6 +359,26 @@ export default function TrackList({
             <span className="tracklist-label">YOUR LIBRARY</span>
             <h1 className="tracklist-title">All Tracks</h1>
             <span className="tracklist-meta">{tracks.length} tracks</span>
+          </div>
+          <div className="tracklist-search-wrapper">
+            <div className="tracklist-search">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button className="tracklist-search-clear" onClick={() => setSearchQuery("")}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
