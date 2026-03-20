@@ -37,11 +37,14 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUn
     const audio = audioRef.current;
     if (!audio || lines.length === 0) return;
 
-    function onTimeUpdate() {
-      // Multiply audio time by speed to shift LRC matching
-      // speed > 1: lyrics advance faster (for sped-up audio files)
-      // speed < 1: lyrics advance slower (for slowed-down audio files)
-      const t = audio!.currentTime * speedRef.current;
+    let rafId: number;
+    let lastIdx = -1;
+    // Lookahead offset: show lyrics slightly ahead of the timestamp
+    // to compensate for audio buffering and natural reading delay
+    const LOOKAHEAD = 0.3;
+
+    function tick() {
+      const t = audio!.currentTime * speedRef.current + LOOKAHEAD;
       let idx = -1;
       for (let i = lines.length - 1; i >= 0; i--) {
         if (t >= lines[i].time) {
@@ -49,11 +52,15 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUn
           break;
         }
       }
-      setCurrentLine(idx);
+      if (idx !== lastIdx) {
+        lastIdx = idx;
+        setCurrentLine(idx);
+      }
+      rafId = requestAnimationFrame(tick);
     }
 
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    return () => audio.removeEventListener("timeupdate", onTimeUpdate);
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [audioRef, lines]);
 
   useEffect(() => {

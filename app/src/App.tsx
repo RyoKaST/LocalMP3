@@ -396,14 +396,18 @@ function App() {
 
   async function handlePickLrc() {
     if (!currentTrack) return;
+    await handleLinkLrcForTrack(currentTrack);
+    setLyricsVisible(true);
+  }
+
+  async function handleLinkLrcForTrack(track: Track) {
     const file = await open({
       filters: [{ name: "LRC Files", extensions: ["lrc"] }],
     });
     if (file) {
       const lrcPath = file as string;
-      await invoke("link_lrc", { trackPath: currentTrack.path, lrcPath });
-      handleLrcLinked(currentTrack.path, lrcPath);
-      setLyricsVisible(true);
+      await invoke("link_lrc", { trackPath: track.path, lrcPath });
+      handleLrcLinked(track.path, lrcPath);
     }
   }
 
@@ -474,6 +478,7 @@ function App() {
             onUpdatePlaylist={handleUpdatePlaylist}
             onPickCover={handlePickCover}
             onEditTrack={setEditingTrack}
+            onLinkLrc={handleLinkLrcForTrack}
           />
         )}
       </main>

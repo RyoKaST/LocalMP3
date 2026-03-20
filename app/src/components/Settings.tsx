@@ -72,7 +72,7 @@ export default function Settings({
   playlistDeleteBehavior,
   onPlaylistDeleteBehaviorChange,
 }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("appearances");
+  const [activeTab, setActiveTab] = useState<Tab>("directories");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   const dupeGroups = useMemo<DupeGroup[]>(() => {
@@ -150,16 +150,16 @@ export default function Settings({
 
       <div className="settings-tabs">
         <button
-          className={`settings-tab ${activeTab === "appearances" ? "active" : ""}`}
-          onClick={() => setActiveTab("appearances")}
-        >
-          Appearances
-        </button>
-        <button
           className={`settings-tab ${activeTab === "directories" ? "active" : ""}`}
           onClick={() => setActiveTab("directories")}
         >
           Directories
+        </button>
+        <button
+          className={`settings-tab ${activeTab === "appearances" ? "active" : ""}`}
+          onClick={() => setActiveTab("appearances")}
+        >
+          Appearances
         </button>
         <button
           className={`settings-tab ${activeTab === "experience" ? "active" : ""}`}
