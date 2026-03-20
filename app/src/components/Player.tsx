@@ -20,6 +20,7 @@ interface PlayerProps {
   onLyricsToggle: () => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   playSource: string | null;
+  onCoverClick: () => void;
 }
 
 function formatTime(secs: number): string {
@@ -47,13 +48,13 @@ export default function Player({
   onLyricsToggle,
   audioRef,
   playSource,
+  onCoverClick,
 }: PlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [seekValue, setSeekValue] = useState(0);
   const isSeeking = useRef(false);
-  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -89,14 +90,10 @@ export default function Player({
     setCurrentTime(val);
   }, []);
 
-  const handleSeekEnd = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseFloat(e.target.value);
-      if (audioRef.current) audioRef.current.currentTime = val;
-      isSeeking.current = false;
-    },
-    [audioRef],
-  );
+  const handleSeekEnd = useCallback(() => {
+    if (audioRef.current) audioRef.current.currentTime = seekValue;
+    isSeeking.current = false;
+  }, [audioRef, seekValue]);
 
   const handleVolumeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,7 +111,7 @@ export default function Player({
       <div className="player-track-info">
         {currentTrack ? (
           <>
-            <div className="player-cover">
+            <div className="player-cover" onClick={onCoverClick} style={{ cursor: "pointer" }}>
               {currentTrack.cover ? (
                 <img src={convertFileSrc(currentTrack.cover)} alt="" />
               ) : (
