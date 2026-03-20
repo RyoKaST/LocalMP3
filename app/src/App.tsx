@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { TransitionEngine } from "./audio/TransitionEngine";
 import Sidebar from "./components/Sidebar";
 import TrackList from "./components/TrackList";
 import Player from "./components/Player";
@@ -27,14 +28,75 @@ function App() {
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("accentColor") || "#1db954");
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("theme") as "dark" | "light") || "dark");
   const [libraryPaths, setLibraryPaths] = useState<string[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const engineRef = useRef<TransitionEngine | null>(null);
+  const handleTrackEndRef = useRef<() => void>(() => {});
+  const queueRef = useRef<Track[]>([]);
+  const queueIndexRef = useRef(0);
+  const playlistsRef = useRef<Playlist[]>([]);
+  const repeatRef = useRef<"off" | "all" | "one">("off");
+
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
+  useEffect(() => { playlistsRef.current = playlists; }, [playlists]);
+  useEffect(() => { repeatRef.current = repeat; }, [repeat]);
 
   useEffect(() => {
-    audioRef.current = new Audio();
+    const engine = new TransitionEngine({
+      onTimeUpdate: (time, dur) => {
+        setCurrentTime(time);
+        setDuration(dur);
+
+        // Auto-transition trigger for mix-enabled playlists
+        const eng = engineRef.current;
+        if (!eng || eng.isTransitioning()) return;
+
+        const q = queueRef.current;
+        const qi = queueIndexRef.current;
+        const currentPlaylistMatch = playlistsRef.current.find((p) =>
+          p.tracks.some((t) => t.path === q[qi]?.path)
+        );
+        const mix = currentPlaylistMatch?.mix;
+        if (!mix?.enabled) return;
+
+        let nextIdx = qi + 1;
+        if (nextIdx >= q.length) {
+          if (repeatRef.current === "all") {
+            nextIdx = 0;
+          } else {
+            return;
+          }
+        }
+
+        const nextTrack = q[nextIdx];
+        const pairKey = `${q[qi].path}::${nextTrack.path}`;
+        const preset = mix.pair_overrides[pairKey] ?? mix.default_transition;
+        const transitionDur = preset.style === "cut" ? 0.05 : preset.duration;
+
+        if (eng.shouldStartTransition(transitionDur)) {
+          eng.scheduleTransition(nextTrack, preset);
+        }
+      },
+      onTrackSwitch: (track) => {
+        setCurrentTrack(track);
+        const qi = queueIndexRef.current;
+        const q = queueRef.current;
+        const nextIdx = qi + 1 < q.length ? qi + 1 : 0;
+        setQueueIndex(nextIdx);
+      },
+      onTransitionStart: () => {},
+      onTransitionEnd: () => {},
+      onEnded: () => {
+        handleTrackEndRef.current();
+      },
+    });
+    engineRef.current = engine;
     loadPlaylists();
     loadSavedLibrary();
     return () => {
-      audioRef.current?.pause();
+      engine.destroy();
     };
   }, []);
 
@@ -111,16 +173,13 @@ function App() {
   }
 
   function playTrack(track: Track, trackQueue: Track[]) {
-    const audio = audioRef.current;
-    if (!audio) return;
-
+    const engine = engineRef.current;
+    if (!engine) return;
     const idx = trackQueue.findIndex((t) => t.path === track.path);
     setQueue(trackQueue);
     setQueueIndex(idx >= 0 ? idx : 0);
     setCurrentTrack(track);
-
-    audio.src = convertFileSrc(track.path);
-    audio.play().then(() => setIsPlaying(true)).catch(console.error);
+    engine.play(track).then(() => setIsPlaying(true)).catch(console.error);
   }
 
   useEffect(() => {
@@ -135,20 +194,21 @@ function App() {
   });
 
   function togglePlayPause() {
-    const audio = audioRef.current;
-    if (!audio || !currentTrack) return;
+    const engine = engineRef.current;
+    if (!engine || !currentTrack) return;
     if (isPlaying) {
-      audio.pause();
+      engine.pause();
       setIsPlaying(false);
     } else {
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      engine.resume();
+      setIsPlaying(true);
     }
   }
 
   function playNext() {
     if (queue.length === 0) return;
-    const audio = audioRef.current;
-    if (!audio) return;
+    const engine = engineRef.current;
+    if (!engine) return;
 
     if (shuffle) {
       const remaining = queue.filter((_, i) => i !== queueIndex);
@@ -157,20 +217,17 @@ function App() {
       const newIdx = queue.findIndex((t) => t.path === pick.path);
       setQueueIndex(newIdx);
       setCurrentTrack(pick);
-      audio.src = convertFileSrc(pick.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      engine.play(pick).then(() => setIsPlaying(true)).catch(console.error);
     } else if (queueIndex < queue.length - 1) {
       const next = queue[queueIndex + 1];
       setQueueIndex(queueIndex + 1);
       setCurrentTrack(next);
-      audio.src = convertFileSrc(next.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      engine.play(next).then(() => setIsPlaying(true)).catch(console.error);
     } else if (repeat === "all") {
       const next = queue[0];
       setQueueIndex(0);
       setCurrentTrack(next);
-      audio.src = convertFileSrc(next.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      engine.play(next).then(() => setIsPlaying(true)).catch(console.error);
     } else {
       setIsPlaying(false);
     }
@@ -178,35 +235,36 @@ function App() {
 
   function playPrev() {
     if (queue.length === 0) return;
-    const audio = audioRef.current;
-    if (!audio) return;
+    const engine = engineRef.current;
+    if (!engine) return;
 
     if (queueIndex > 0) {
       const prev = queue[queueIndex - 1];
       setQueueIndex(queueIndex - 1);
       setCurrentTrack(prev);
-      audio.src = convertFileSrc(prev.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      engine.play(prev).then(() => setIsPlaying(true)).catch(console.error);
     } else if (repeat === "all") {
       const prev = queue[queue.length - 1];
       setQueueIndex(queue.length - 1);
       setCurrentTrack(prev);
-      audio.src = convertFileSrc(prev.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      engine.play(prev).then(() => setIsPlaying(true)).catch(console.error);
     }
   }
 
   const handleTrackEnd = useCallback(() => {
     if (repeat === "one") {
-      const audio = audioRef.current;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      const engine = engineRef.current;
+      if (engine) {
+        engine.seek(0);
+        engine.resume();
+        setIsPlaying(true);
       }
     } else {
       playNext();
     }
   }, [queueIndex, queue, repeat, shuffle]);
+
+  useEffect(() => { handleTrackEndRef.current = handleTrackEnd; }, [handleTrackEnd]);
 
   async function handleCreatePlaylist(name: string) {
     try {
@@ -339,7 +397,7 @@ function App() {
       if (currentTrack?.path === trackPath) {
         setCurrentTrack(null);
         setIsPlaying(false);
-        if (audioRef.current) audioRef.current.pause();
+        engineRef.current?.pause();
       }
     } catch (e) {
       console.error("Failed to delete track:", e);
@@ -387,6 +445,14 @@ function App() {
     }
   }
 
+  const getEngineCurrentTime = useCallback(() => {
+    return engineRef.current?.getCurrentTime() ?? 0;
+  }, []);
+
+  const handleEngineSeek = useCallback((time: number) => {
+    engineRef.current?.seek(time);
+  }, []);
+
   const currentPlaylist =
     currentView !== "library"
       ? playlists.find((p) => p.id === currentView) || null
@@ -429,6 +495,12 @@ function App() {
             onUpdatePlaylist={handleUpdatePlaylist}
             onPickCover={handlePickCover}
             onEditTrack={setEditingTrack}
+            engine={engineRef.current}
+            onMixSaved={(playlistId, mix) => {
+              setPlaylists((prev) =>
+                prev.map((p) => p.id === playlistId ? { ...p, mix } : p)
+              );
+            }}
           />
         )}
       </main>
@@ -444,7 +516,8 @@ function App() {
         <Lyrics
           lrcPath={currentTrack.lrc_path}
           trackPath={currentTrack.path}
-          audioRef={audioRef}
+          getCurrentTime={getEngineCurrentTime}
+          onSeek={handleEngineSeek}
           onChangeLrc={handlePickLrc}
           onUnlinkLrc={handleUnlinkLrc}
           onClose={() => setLyricsVisible(false)}
@@ -457,12 +530,15 @@ function App() {
         queueIndex={queueIndex}
         shuffle={shuffle}
         repeat={repeat}
+        currentTime={currentTime}
+        duration={duration}
         onPlayPause={togglePlayPause}
         onNext={playNext}
         onPrev={playPrev}
-        onTrackEnd={handleTrackEnd}
         onShuffleToggle={() => setShuffle((s) => !s)}
         onRepeatCycle={() => setRepeat((r) => r === "off" ? "all" : r === "all" ? "one" : "off")}
+        onSeek={(time) => engineRef.current?.seek(time)}
+        onVolumeChange={(v) => engineRef.current?.setVolume(v)}
         hasLrc={!!currentTrack?.lrc_path}
         lyricsVisible={lyricsVisible}
         onLyricsToggle={() => {
@@ -472,7 +548,6 @@ function App() {
             handlePickLrc();
           }
         }}
-        audioRef={audioRef}
       />
     </div>
   );

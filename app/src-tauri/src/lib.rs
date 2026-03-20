@@ -7,6 +7,12 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
+use symphonia::core::audio::SampleBuffer;
+use symphonia::core::codecs::DecoderOptions;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 use walkdir::WalkDir;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -29,6 +35,56 @@ pub struct Playlist {
     name: String,
     cover: Option<String>,
     tracks: Vec<Track>,
+    #[serde(default)]
+    mix: Option<PlaylistMix>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum TransitionStyle {
+    Fade,
+    Rise,
+    Cut,
+    EchoOut,
+    Custom,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CurveHandle {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CurvePoint {
+    pub x: f64,
+    pub y: f64,
+    #[serde(rename = "handleIn")]
+    pub handle_in: CurveHandle,
+    #[serde(rename = "handleOut")]
+    pub handle_out: CurveHandle,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CustomCurves {
+    pub outgoing: Vec<CurvePoint>,
+    pub incoming: Vec<CurvePoint>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TransitionPreset {
+    pub style: TransitionStyle,
+    pub duration: f64,
+    #[serde(default)]
+    pub custom_curves: Option<CustomCurves>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PlaylistMix {
+    pub enabled: bool,
+    pub default_transition: TransitionPreset,
+    #[serde(default)]
+    pub pair_overrides: std::collections::HashMap<String, TransitionPreset>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -240,6 +296,7 @@ fn create_playlist(app: tauri::AppHandle, name: String) -> Playlist {
         name,
         cover: None,
         tracks: vec![],
+        mix: None,
     };
     data.playlists.push(playlist.clone());
     save_data(&app, &data);
@@ -539,6 +596,151 @@ fn delete_track_file(track_path: String) -> Result<(), String> {
     fs::remove_file(path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn save_playlist_mix(app: tauri::AppHandle, playlist_id: String, mix: PlaylistMix) {
+    let mut data = load_data(&app);
+    if let Some(playlist) = data.playlists.iter_mut().find(|p| p.id == playlist_id) {
+        playlist.mix = Some(mix);
+        save_data(&app, &data);
+    }
+}
+
+#[tauri::command]
+fn get_playlist_mix(app: tauri::AppHandle, playlist_id: String) -> Option<PlaylistMix> {
+    let data = load_data(&app);
+    data.playlists.iter().find(|p| p.id == playlist_id)?.mix.clone()
+}
+
+#[tauri::command]
+async fn get_waveform(path: String, start_sec: f64, duration_sec: f64, num_samples: u32) -> Result<Vec<f32>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        get_waveform_sync(path, start_sec, duration_sec, num_samples)
+    }).await.map_err(|e| e.to_string())
+}
+
+fn get_waveform_sync(path: String, start_sec: f64, duration_sec: f64, num_samples: u32) -> Vec<f32> {
+    let file = match std::fs::File::open(&path) {
+        Ok(f) => f,
+        Err(_) => return vec![],
+    };
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    let mut hint = Hint::new();
+    if let Some(ext) = std::path::Path::new(&path).extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+
+    let probed = match symphonia::default::get_probe().format(
+        &hint,
+        mss,
+        &FormatOptions::default(),
+        &MetadataOptions::default(),
+    ) {
+        Ok(p) => p,
+        Err(_) => return vec![],
+    };
+
+    let mut format = probed.format;
+    let track = match format.default_track() {
+        Some(t) => t.clone(),
+        None => return vec![],
+    };
+
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(44100) as f64;
+    let mut decoder = match symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default()) {
+        Ok(d) => d,
+        Err(_) => return vec![],
+    };
+
+    let start_sample = (start_sec * sample_rate) as u64;
+    let total_samples = (duration_sec * sample_rate) as u64;
+    let samples_per_bin = if num_samples > 0 { (total_samples / num_samples as u64).max(1) } else { return vec![]; };
+
+    let mut peaks: Vec<f32> = Vec::with_capacity(num_samples as usize);
+    let mut current_sample: u64 = 0;
+    let mut bin_max: f32 = 0.0;
+    let mut bin_count: u64 = 0;
+    let mut samples_collected: u64 = 0;
+    let mut reached_start = false;
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(_) => break,
+        };
+        if packet.track_id() != track.id {
+            continue;
+        }
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        let spec = *decoded.spec();
+        let num_frames = decoded.frames();
+        let mut sample_buf = SampleBuffer::<f32>::new(num_frames as u64, spec);
+        sample_buf.copy_interleaved_ref(decoded);
+        let samples = sample_buf.samples();
+        let channels = spec.channels.count().max(1);
+
+        for frame_idx in 0..num_frames {
+            if !reached_start {
+                current_sample += 1;
+                if current_sample >= start_sample {
+                    reached_start = true;
+                }
+                continue;
+            }
+
+            if samples_collected >= total_samples {
+                break;
+            }
+
+            let mut frame_val: f32 = 0.0;
+            for ch in 0..channels {
+                let idx = frame_idx * channels + ch;
+                if idx < samples.len() {
+                    frame_val += samples[idx].abs();
+                }
+            }
+            frame_val /= channels as f32;
+
+            if frame_val > bin_max {
+                bin_max = frame_val;
+            }
+            bin_count += 1;
+            samples_collected += 1;
+
+            if bin_count >= samples_per_bin {
+                peaks.push(bin_max);
+                bin_max = 0.0;
+                bin_count = 0;
+                if peaks.len() >= num_samples as usize {
+                    break;
+                }
+            }
+        }
+
+        if peaks.len() >= num_samples as usize || samples_collected >= total_samples {
+            break;
+        }
+    }
+
+    if bin_count > 0 && peaks.len() < num_samples as usize {
+        peaks.push(bin_max);
+    }
+
+    let max_peak = peaks.iter().cloned().fold(0.0f32, f32::max);
+    if max_peak > 0.0 {
+        for p in peaks.iter_mut() {
+            *p /= max_peak;
+        }
+    }
+
+    peaks
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -564,6 +766,9 @@ pub fn run() {
             search_lrc_online,
             set_lrc_speed,
             get_lrc_speed,
+            save_playlist_mix,
+            get_playlist_mix,
+            get_waveform,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

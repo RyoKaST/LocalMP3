@@ -9,16 +9,18 @@ interface PlayerProps {
   queueIndex: number;
   shuffle: boolean;
   repeat: "off" | "all" | "one";
+  currentTime: number;
+  duration: number;
   onPlayPause: () => void;
   onNext: () => void;
   onPrev: () => void;
-  onTrackEnd: () => void;
   onShuffleToggle: () => void;
   onRepeatCycle: () => void;
+  onSeek: (time: number) => void;
+  onVolumeChange: (volume: number) => void;
   hasLrc: boolean;
   lyricsVisible: boolean;
   onLyricsToggle: () => void;
-  audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
 function formatTime(secs: number): string {
@@ -35,77 +37,50 @@ export default function Player({
   queueIndex,
   shuffle,
   repeat,
+  currentTime,
+  duration,
   onPlayPause,
   onNext,
   onPrev,
-  onTrackEnd,
   onShuffleToggle,
   onRepeatCycle,
+  onSeek,
+  onVolumeChange,
   hasLrc,
   lyricsVisible,
   onLyricsToggle,
-  audioRef,
 }: PlayerProps) {
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
   const [seekValue, setSeekValue] = useState(0);
-  const isSeeking = useRef(false);
-  const progressRef = useRef<HTMLDivElement>(null);
+  const [volume, setVolume] = useState(1);
+  const seekingRef = useRef(false);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => {
-      if (!isSeeking.current) {
-        setCurrentTime(audio.currentTime);
-        setSeekValue(audio.currentTime);
-      }
-    };
-    const onDurationChange = () => setDuration(audio.duration);
-    const onEnded = () => onTrackEnd();
-
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("durationchange", onDurationChange);
-    audio.addEventListener("ended", onEnded);
-
-    return () => {
-      audio.removeEventListener("timeupdate", onTimeUpdate);
-      audio.removeEventListener("durationchange", onDurationChange);
-      audio.removeEventListener("ended", onEnded);
-    };
-  }, [audioRef, onTrackEnd]);
+    if (!seekingRef.current) {
+      setSeekValue(currentTime);
+    }
+  }, [currentTime]);
 
   const handleSeekStart = useCallback(() => {
-    isSeeking.current = true;
+    seekingRef.current = true;
   }, []);
 
   const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    setSeekValue(val);
-    setCurrentTime(val);
+    setSeekValue(parseFloat(e.target.value));
   }, []);
 
-  const handleSeekEnd = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseFloat(e.target.value);
-      if (audioRef.current) audioRef.current.currentTime = val;
-      isSeeking.current = false;
-    },
-    [audioRef],
-  );
+  const handleSeekEnd = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    onSeek(val);
+    seekingRef.current = false;
+  }, [onSeek]);
 
-  const handleVolumeChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = parseFloat(e.target.value);
-      setVolume(v);
-      if (audioRef.current) audioRef.current.volume = v;
-    },
-    [audioRef],
-  );
+  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = parseFloat(e.target.value);
+    setVolume(v);
+    onVolumeChange(v);
+  }, [onVolumeChange]);
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progress = duration > 0 ? (seekValue / duration) * 100 : 0;
 
   return (
     <div className="player">

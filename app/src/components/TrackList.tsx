@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Track, Playlist } from "../types";
+import { Track, Playlist, PlaylistMix } from "../types";
+import { TransitionEngine } from "../audio/TransitionEngine";
+import MixMode from "./MixMode";
 
 interface TrackListProps {
   tracks: Track[];
@@ -14,6 +16,8 @@ interface TrackListProps {
   onUpdatePlaylist: (id: string, name?: string, cover?: string) => void;
   onPickCover: (playlistId: string) => void;
   onEditTrack: (track: Track) => void;
+  engine: TransitionEngine | null;
+  onMixSaved: (playlistId: string, mix: PlaylistMix) => void;
 }
 
 function formatDuration(secs: number): string {
@@ -173,7 +177,10 @@ export default function TrackList({
   onUpdatePlaylist,
   onPickCover,
   onEditTrack,
+  engine,
+  onMixSaved,
 }: TrackListProps) {
+  const [mixMode, setMixMode] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const rawTracks = playlist ? playlist.tracks : tracks;
@@ -244,6 +251,19 @@ export default function TrackList({
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setContextMenu({ track, x: rect.right, y: rect.bottom + 4 });
+  }
+
+  if (mixMode && playlist) {
+    return (
+      <div className="tracklist">
+        <MixMode
+          playlist={playlist}
+          engine={engine}
+          onExit={() => setMixMode(false)}
+          onMixSaved={(mix) => onMixSaved(playlist.id, mix)}
+        />
+      </div>
+    );
   }
 
   return (
@@ -319,6 +339,15 @@ export default function TrackList({
               {playlist.tracks.length} track
               {playlist.tracks.length !== 1 ? "s" : ""}
             </span>
+            <button
+              className={`mix-btn${playlist.mix?.enabled ? " active" : ""}`}
+              onClick={() => setMixMode(true)}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z" />
+              </svg>
+              Mix
+            </button>
           </div>
         </div>
       ) : (

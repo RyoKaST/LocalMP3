@@ -5,13 +5,14 @@ import { LrcLine } from "../types";
 interface LyricsProps {
   lrcPath: string;
   trackPath: string;
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  getCurrentTime: () => number;
+  onSeek: (time: number) => void;
   onChangeLrc: () => void;
   onUnlinkLrc: () => void;
   onClose: () => void;
 }
 
-export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUnlinkLrc, onClose }: LyricsProps) {
+export default function Lyrics({ lrcPath, trackPath, getCurrentTime, onSeek, onChangeLrc, onUnlinkLrc, onClose }: LyricsProps) {
   const [lines, setLines] = useState<LrcLine[]>([]);
   const [currentLine, setCurrentLine] = useState(-1);
   const [speed, setSpeed] = useState(1);
@@ -34,14 +35,10 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUn
   }, [trackPath]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || lines.length === 0) return;
+    if (lines.length === 0) return;
 
-    function onTimeUpdate() {
-      // Multiply audio time by speed to shift LRC matching
-      // speed > 1: lyrics advance faster (for sped-up audio files)
-      // speed < 1: lyrics advance slower (for slowed-down audio files)
-      const t = audio!.currentTime * speedRef.current;
+    const interval = setInterval(() => {
+      const t = getCurrentTime() * speedRef.current;
       let idx = -1;
       for (let i = lines.length - 1; i >= 0; i--) {
         if (t >= lines[i].time) {
@@ -50,11 +47,10 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUn
         }
       }
       setCurrentLine(idx);
-    }
+    }, 250);
 
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    return () => audio.removeEventListener("timeupdate", onTimeUpdate);
-  }, [audioRef, lines]);
+    return () => clearInterval(interval);
+  }, [getCurrentTime, lines]);
 
   useEffect(() => {
     if (currentLine < 0 || !containerRef.current) return;
@@ -130,8 +126,7 @@ export default function Lyrics({ lrcPath, trackPath, audioRef, onChangeLrc, onUn
               key={i}
               className={`lyrics-line${i === currentLine ? " active" : ""}`}
               onClick={() => {
-                const audio = audioRef.current;
-                if (audio) audio.currentTime = line.time / speedRef.current;
+                onSeek(line.time / speedRef.current);
               }}
             >
               {line.text}
