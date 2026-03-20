@@ -1,5 +1,37 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { Track } from "../types";
+
+function hexToHsv(hex: string): [number, number, number] {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return [h, s, max];
+}
+
+function hsvToHex(h: number, s: number, v: number): string {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else { r = c; b = x; }
+  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 
 export type PlaylistDeleteBehavior = "find-playlist" | "library" | "stop";
 
@@ -46,6 +78,122 @@ function formatDuration(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function ColorPicker({ color, onChange }: { color: string; onChange: (c: string) => void }) {
+  const [hsv, setHsv] = useState(() => hexToHsv(color));
+  const [expanded, setExpanded] = useState(false);
+  const svRef = useRef<HTMLDivElement>(null);
+  const hueRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<"sv" | "hue" | null>(null);
+
+  // Sync if color changes externally (preset click)
+  const lastExternal = useRef(color);
+  if (color !== lastExternal.current) {
+    lastExternal.current = color;
+    const newHsv = hexToHsv(color);
+    if (hsvToHex(...hsv) !== color) {
+      setHsv(newHsv);
+    }
+  }
+
+  const applyHsv = useCallback((h: number, s: number, v: number) => {
+    setHsv([h, s, v]);
+    const hex = hsvToHex(h, s, v);
+    lastExternal.current = hex;
+    onChange(hex);
+  }, [onChange]);
+
+  const handleSvMove = useCallback((e: MouseEvent | React.MouseEvent) => {
+    const rect = svRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const s = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const v = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
+    applyHsv(hsv[0], s, v);
+  }, [hsv, applyHsv]);
+
+  const handleHueMove = useCallback((e: MouseEvent | React.MouseEvent) => {
+    const rect = hueRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const h = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
+    applyHsv(h, hsv[1], hsv[2]);
+  }, [hsv, applyHsv]);
+
+  const handleMouseUp = useCallback(() => {
+    draggingRef.current = null;
+    window.removeEventListener("mousemove", handleGlobalMove);
+    window.removeEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  const handleGlobalMove = useCallback((e: MouseEvent) => {
+    if (draggingRef.current === "sv") handleSvMove(e);
+    else if (draggingRef.current === "hue") handleHueMove(e);
+  }, [handleSvMove, handleHueMove]);
+
+  const startDrag = useCallback((type: "sv" | "hue", e: React.MouseEvent) => {
+    draggingRef.current = type;
+    if (type === "sv") handleSvMove(e);
+    else handleHueMove(e);
+    window.addEventListener("mousemove", handleGlobalMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, [handleSvMove, handleHueMove, handleGlobalMove, handleMouseUp]);
+
+  return (
+    <div className="color-picker">
+      <button className="color-picker-toggle" onClick={() => setExpanded(!expanded)}>
+        <span className="color-picker-preview" style={{ background: color }} />
+        Custom
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"
+          style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+          <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+        </svg>
+      </button>
+      {expanded && (
+        <div className="color-picker-panel">
+          <div
+            className="color-picker-sv"
+            ref={svRef}
+            style={{ background: `hsl(${hsv[0]}, 100%, 50%)` }}
+            onMouseDown={(e) => startDrag("sv", e)}
+          >
+            <div className="color-picker-sv-white" />
+            <div className="color-picker-sv-black" />
+            <div
+              className="color-picker-sv-cursor"
+              style={{ left: `${hsv[1] * 100}%`, top: `${(1 - hsv[2]) * 100}%` }}
+            />
+          </div>
+          <div
+            className="color-picker-hue"
+            ref={hueRef}
+            onMouseDown={(e) => startDrag("hue", e)}
+          >
+            <div
+              className="color-picker-hue-cursor"
+              style={{ left: `${(hsv[0] / 360) * 100}%` }}
+            />
+          </div>
+          <div className="color-picker-hex">
+            <span className="color-picker-hex-label">#</span>
+            <input
+              className="color-picker-hex-input"
+              value={color.slice(1)}
+              maxLength={6}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                if (v.length === 6) {
+                  const hex = `#${v}`;
+                  onChange(hex);
+                  setHsv(hexToHsv(hex));
+                  lastExternal.current = hex;
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface DupeGroup {
@@ -225,16 +373,7 @@ export default function Settings({
                   </button>
                 ))}
               </div>
-              <div className="settings-custom-color">
-                <label>
-                  Custom
-                  <input
-                    type="color"
-                    value={accentColor}
-                    onChange={(e) => onAccentChange(e.target.value)}
-                  />
-                </label>
-              </div>
+              <ColorPicker color={accentColor} onChange={onAccentChange} />
             </div>
           </div>
         )}
