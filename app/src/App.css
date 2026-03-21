@@ -2591,7 +2591,7 @@ td.col-actions {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 15%, transparent) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
 }
 
 /* --- Content --- */
@@ -2848,7 +2848,7 @@ td.col-actions {
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--accent) var(--progress, 0%), rgba(255, 255, 255, 0.2) var(--progress, 0%));
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.85) var(--progress, 0%), rgba(255, 255, 255, 0.2) var(--progress, 0%));
   outline: none;
   cursor: pointer;
 }
@@ -2903,7 +2903,7 @@ td.col-actions {
 }
 
 .fs-btn-mode.active {
-  color: var(--accent);
+  color: #fff;
 }
 
 .fs-volume {
