@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Track, Playlist } from "../types";
+import { Track, Playlist, VideoFile } from "../types";
+import ContextMenu from "./ContextMenu";
 
 type LibraryClickBehavior = "songs" | "albums" | "keep";
 
@@ -19,140 +20,17 @@ interface TrackListProps {
   onPickCover: (playlistId: string) => void;
   onEditTrack: (track: Track) => void;
   onLinkLrc: (track: Track) => void;
+  onLinkVideo: (track: Track) => void;
+  videos: VideoFile[];
+  onPlayVideo: (videoPath: string) => void;
+  onLinkVideoToTrack: (trackPath: string, videoPath: string) => void;
+  onUnlinkVideo: (trackPath: string) => void;
 }
 
 function formatDuration(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function ContextMenu({
-  track,
-  playlist,
-  playlists,
-  position,
-  onClose,
-  onAddToPlaylist,
-  onRemoveFromPlaylist,
-  onEditTrack,
-  onLinkLrc,
-}: {
-  track: Track;
-  playlist: Playlist | null;
-  playlists: Playlist[];
-  position: { x: number; y: number };
-  onClose: () => void;
-  onAddToPlaylist: (playlistId: string, track: Track) => void;
-  onRemoveFromPlaylist: (playlistId: string, trackPath: string) => void;
-  onEditTrack: (track: Track) => void;
-  onLinkLrc: (track: Track) => void;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [showPlaylistSub, setShowPlaylistSub] = useState(false);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [onClose]);
-
-  // Adjust position so menu doesn't overflow viewport
-  const style: React.CSSProperties = {
-    position: "fixed",
-    top: position.y,
-    left: position.x,
-    zIndex: 1000,
-  };
-
-  return (
-    <div className="context-menu" style={style} ref={menuRef}>
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          onEditTrack(track);
-          onClose();
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-        </svg>
-        Edit metadata
-      </button>
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          onLinkLrc(track);
-          onClose();
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-        </svg>
-        {track.lrc_path ? "Change LRC file" : "Link LRC file"}
-      </button>
-
-      {playlist ? (
-        <button
-          className="context-menu-item context-menu-danger"
-          onClick={() => {
-            onRemoveFromPlaylist(playlist.id, track.path);
-            onClose();
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M19 13H5v-2h14v2z" />
-          </svg>
-          Remove from playlist
-        </button>
-      ) : (
-        <div
-          className="context-menu-item context-menu-sub-trigger"
-          onMouseEnter={() => setShowPlaylistSub(true)}
-          onMouseLeave={() => setShowPlaylistSub(false)}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
-          Add to playlist
-          <svg
-            viewBox="0 0 24 24"
-            width="14"
-            height="14"
-            fill="currentColor"
-            className="context-menu-chevron"
-          >
-            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-          </svg>
-          {showPlaylistSub && (
-            <div className="context-submenu">
-              {playlists.length === 0 ? (
-                <span className="context-menu-empty">No playlists yet</span>
-              ) : (
-                playlists.map((p) => (
-                  <button
-                    key={p.id}
-                    className="context-menu-item"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddToPlaylist(p.id, track);
-                      onClose();
-                    }}
-                  >
-                    {p.name}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 type SortKey = "title" | "artist" | "album" | "duration";
@@ -178,7 +56,7 @@ interface Album {
   totalDuration: number;
 }
 
-type ViewMode = "songs" | "albums";
+type ViewMode = "songs" | "albums" | "videos";
 
 export default function TrackList({
   tracks,
@@ -193,8 +71,13 @@ export default function TrackList({
   onPickCover,
   onEditTrack,
   onLinkLrc,
+  onLinkVideo,
   libraryClickBehavior,
   libraryResetKey,
+  videos,
+  onPlayVideo,
+  onLinkVideoToTrack,
+  onUnlinkVideo,
 }: TrackListProps) {
   const [sortKey, setSortKey] = useState<SortKey>("title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -204,10 +87,11 @@ export default function TrackList({
   const filteredTracks = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return rawTracks;
-    return rawTracks.filter((t) =>
-      t.title.toLowerCase().includes(q) ||
-      t.artist.toLowerCase().includes(q) ||
-      t.album.toLowerCase().includes(q)
+    return rawTracks.filter(
+      (t) =>
+        t.title.toLowerCase().includes(q) ||
+        t.artist.toLowerCase().includes(q) ||
+        t.album.toLowerCase().includes(q),
     );
   }, [rawTracks, searchQuery]);
 
@@ -217,11 +101,36 @@ export default function TrackList({
     x: number;
     y: number;
   } | null>(null);
+  const [videoContextMenu, setVideoContextMenu] = useState<{
+    video: VideoFile;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [showTrackPicker, setShowTrackPicker] = useState<VideoFile | null>(null);
+  const [trackPickerSearch, setTrackPickerSearch] = useState("");
   const [editingName, setEditingName] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("songs");
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
   const lastResetKey = useRef(libraryResetKey);
+
+  // Close video context menu on outside click
+  useEffect(() => {
+    if (!videoContextMenu) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest(".context-menu")) return;
+      setVideoContextMenu(null);
+    };
+    // Defer to next tick so the triggering right-click doesn't immediately close it
+    const raf = requestAnimationFrame(() => {
+      document.addEventListener("mousedown", handler);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("mousedown", handler);
+    };
+  }, [videoContextMenu]);
 
   // Handle Library sidebar click
   useEffect(() => {
@@ -261,13 +170,18 @@ export default function TrackList({
       if (!album.cover && track.cover) album.cover = track.cover;
     }
     const result = [...map.values()];
-    result.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    result.sort((a, b) =>
+      a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+    );
     return result;
   }, [filteredTracks]);
 
   const activeAlbum = useMemo(() => {
     if (!selectedAlbum) return null;
-    const album = albums.find((a) => `${a.name.toLowerCase()}::${a.artist.toLowerCase()}` === selectedAlbum);
+    const album = albums.find(
+      (a) =>
+        `${a.name.toLowerCase()}::${a.artist.toLowerCase()}` === selectedAlbum,
+    );
     if (!album) return null;
     const sortedTracks = [...album.tracks].sort((a, b) => {
       if (a.track_number == null && b.track_number == null) return 0;
@@ -296,7 +210,7 @@ export default function TrackList({
   function handleDotsClick(track: Track, e: React.MouseEvent) {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setContextMenu({ track, x: rect.right, y: rect.bottom + 4 });
+    setContextMenu({ track, x: rect.left, y: rect.bottom + 4 });
   }
 
   return (
@@ -365,7 +279,9 @@ export default function TrackList({
                 }}
               />
               {nameError && (
-                <span className="tracklist-title-error">Name cannot be empty</span>
+                <span className="tracklist-title-error">
+                  Name cannot be empty
+                </span>
               )}
             </div>
             <span className="tracklist-meta">
@@ -375,7 +291,12 @@ export default function TrackList({
           </div>
           <div className="tracklist-search-wrapper">
             <div className="tracklist-search">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="currentColor"
+              >
                 <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
               </svg>
               <input
@@ -385,8 +306,16 @@ export default function TrackList({
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               {searchQuery && (
-                <button className="tracklist-search-clear" onClick={() => setSearchQuery("")}>
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <button
+                  className="tracklist-search-clear"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="currentColor"
+                  >
                     <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                   </svg>
                 </button>
@@ -403,7 +332,12 @@ export default function TrackList({
           </div>
           <div className="tracklist-search-wrapper">
             <div className="tracklist-search">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="currentColor"
+              >
                 <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
               </svg>
               <input
@@ -413,8 +347,16 @@ export default function TrackList({
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               {searchQuery && (
-                <button className="tracklist-search-clear" onClick={() => setSearchQuery("")}>
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <button
+                  className="tracklist-search-clear"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="currentColor"
+                  >
                     <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                   </svg>
                 </button>
@@ -427,7 +369,10 @@ export default function TrackList({
       <div className="tracklist-view-tabs">
         <button
           className={`tracklist-view-tab ${viewMode === "songs" ? "active" : ""}`}
-          onClick={() => { setViewMode("songs"); setSelectedAlbum(null); }}
+          onClick={() => {
+            setViewMode("songs");
+            setSelectedAlbum(null);
+          }}
         >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
             <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" />
@@ -443,10 +388,19 @@ export default function TrackList({
           </svg>
           Albums
         </button>
+        <button
+          className={`tracklist-view-tab ${viewMode === "videos" ? "active" : ""}`}
+          onClick={() => setViewMode("videos")}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z" />
+          </svg>
+          Videos
+        </button>
       </div>
 
-      {viewMode === "songs" && (
-        displayTracks.length === 0 ? (
+      {viewMode === "songs" &&
+        (displayTracks.length === 0 ? (
           <div className="tracklist-empty">
             {playlist
               ? "This playlist is empty. Add tracks from your library."
@@ -456,17 +410,49 @@ export default function TrackList({
           <table className="tracklist-table">
             <thead>
               <tr>
-                <th className={`col-title sortable ${sortKey === "title" ? "sorted" : ""}`} onClick={() => handleSort("title")}>
-                  Title {sortKey === "title" && <span className="sort-arrow">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>}
+                <th
+                  className={`col-title sortable ${sortKey === "title" ? "sorted" : ""}`}
+                  onClick={() => handleSort("title")}
+                >
+                  Title{" "}
+                  {sortKey === "title" && (
+                    <span className="sort-arrow">
+                      {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+                    </span>
+                  )}
                 </th>
-                <th className={`col-artist sortable ${sortKey === "artist" ? "sorted" : ""}`} onClick={() => handleSort("artist")}>
-                  Artist {sortKey === "artist" && <span className="sort-arrow">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>}
+                <th
+                  className={`col-artist sortable ${sortKey === "artist" ? "sorted" : ""}`}
+                  onClick={() => handleSort("artist")}
+                >
+                  Artist{" "}
+                  {sortKey === "artist" && (
+                    <span className="sort-arrow">
+                      {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+                    </span>
+                  )}
                 </th>
-                <th className={`col-album sortable ${sortKey === "album" ? "sorted" : ""}`} onClick={() => handleSort("album")}>
-                  Album {sortKey === "album" && <span className="sort-arrow">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>}
+                <th
+                  className={`col-album sortable ${sortKey === "album" ? "sorted" : ""}`}
+                  onClick={() => handleSort("album")}
+                >
+                  Album{" "}
+                  {sortKey === "album" && (
+                    <span className="sort-arrow">
+                      {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+                    </span>
+                  )}
                 </th>
-                <th className={`col-duration sortable ${sortKey === "duration" ? "sorted" : ""}`} onClick={() => handleSort("duration")}>
-                  Duration {sortKey === "duration" && <span className="sort-arrow">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>}
+                <th
+                  className={`col-duration sortable ${sortKey === "duration" ? "sorted" : ""}`}
+                  onClick={() => handleSort("duration")}
+                >
+                  Duration{" "}
+                  {sortKey === "duration" && (
+                    <span className="sort-arrow">
+                      {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+                    </span>
+                  )}
                 </th>
                 <th className="col-actions"></th>
               </tr>
@@ -476,7 +462,13 @@ export default function TrackList({
                 <tr
                   key={track.path + index}
                   className={`tracklist-row ${currentTrack?.path === track.path ? "playing" : ""}`}
-                  onDoubleClick={() => onPlay(track, displayTracks, playlist ? playlist.name : "Library")}
+                  onDoubleClick={() =>
+                    onPlay(
+                      track,
+                      displayTracks,
+                      playlist ? playlist.name : "Library",
+                    )
+                  }
                   onContextMenu={(e) => handleContextMenu(track, e)}
                 >
                   <td className="col-title">
@@ -486,7 +478,11 @@ export default function TrackList({
                           <img
                             src={convertFileSrc(track.cover)}
                             alt=""
-                            className={currentTrack?.path === track.path ? "cover-greyed" : ""}
+                            className={
+                              currentTrack?.path === track.path
+                                ? "cover-greyed"
+                                : ""
+                            }
                           />
                         ) : (
                           <svg
@@ -498,19 +494,24 @@ export default function TrackList({
                             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
                           </svg>
                         )}
-                        {currentTrack?.path === track.path && (
-                          isPlaying ? (
+                        {currentTrack?.path === track.path &&
+                          (isPlaying ? (
                             <span className="playing-icon playing-icon-overlay">
                               <span></span>
                               <span></span>
                               <span></span>
                             </span>
                           ) : (
-                            <svg className="playing-icon-overlay" viewBox="0 0 24 24" width="20" height="20" fill="var(--accent)">
+                            <svg
+                              className="playing-icon-overlay"
+                              viewBox="0 0 24 24"
+                              width="20"
+                              height="20"
+                              fill="var(--accent)"
+                            >
                               <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                             </svg>
-                          )
-                        )}
+                          ))}
                       </div>
                       <span>{track.title}</span>
                     </div>
@@ -541,11 +542,11 @@ export default function TrackList({
               ))}
             </tbody>
           </table>
-        )
-      )}
+        ))}
 
-      {viewMode === "albums" && !activeAlbum && (
-        albums.length === 0 ? (
+      {viewMode === "albums" &&
+        !activeAlbum &&
+        (albums.length === 0 ? (
           <div className="tracklist-empty">
             {playlist
               ? "This playlist is empty. Add tracks from your library."
@@ -555,7 +556,9 @@ export default function TrackList({
           <div className="album-grid">
             {albums.map((album) => {
               const key = `${album.name.toLowerCase()}::${album.artist.toLowerCase()}`;
-              const isPlayingAlbum = currentTrack && album.tracks.some((t) => t.path === currentTrack.path);
+              const isPlayingAlbum =
+                currentTrack &&
+                album.tracks.some((t) => t.path === currentTrack.path);
               return (
                 <div
                   key={key}
@@ -567,7 +570,12 @@ export default function TrackList({
                       <img src={convertFileSrc(album.cover)} alt="" />
                     ) : (
                       <div className="album-card-cover-placeholder">
-                        <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="32"
+                          height="32"
+                          fill="currentColor"
+                        >
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
                         </svg>
                       </div>
@@ -576,10 +584,16 @@ export default function TrackList({
                       className="album-card-play"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (album.tracks.length > 0) onPlay(album.tracks[0], album.tracks, album.name);
+                        if (album.tracks.length > 0)
+                          onPlay(album.tracks[0], album.tracks, album.name);
                       }}
                     >
-                      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        fill="currentColor"
+                      >
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     </button>
@@ -592,12 +606,14 @@ export default function TrackList({
               );
             })}
           </div>
-        )
-      )}
+        ))}
 
       {viewMode === "albums" && activeAlbum && (
         <div className="album-detail">
-          <button className="album-detail-back" onClick={() => setSelectedAlbum(null)}>
+          <button
+            className="album-detail-back"
+            onClick={() => setSelectedAlbum(null)}
+          >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
             </svg>
@@ -609,7 +625,12 @@ export default function TrackList({
                 <img src={convertFileSrc(activeAlbum.cover)} alt="" />
               ) : (
                 <div className="album-card-cover-placeholder">
-                  <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="40"
+                    height="40"
+                    fill="currentColor"
+                  >
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
                   </svg>
                 </div>
@@ -619,7 +640,9 @@ export default function TrackList({
               <span className="tracklist-label">ALBUM</span>
               <h2 className="album-detail-name">{activeAlbum.name}</h2>
               <span className="album-detail-meta">
-                {activeAlbum.artist} &middot; {activeAlbum.tracks.length} track{activeAlbum.tracks.length !== 1 ? "s" : ""} &middot; {formatDuration(activeAlbum.totalDuration)}
+                {activeAlbum.artist} &middot; {activeAlbum.tracks.length} track
+                {activeAlbum.tracks.length !== 1 ? "s" : ""} &middot;{" "}
+                {formatDuration(activeAlbum.totalDuration)}
               </span>
             </div>
           </div>
@@ -637,7 +660,9 @@ export default function TrackList({
                 <tr
                   key={track.path}
                   className={`tracklist-row ${currentTrack?.path === track.path ? "playing" : ""}`}
-                  onDoubleClick={() => onPlay(track, activeAlbum.tracks, activeAlbum.name)}
+                  onDoubleClick={() =>
+                    onPlay(track, activeAlbum.tracks, activeAlbum.name)
+                  }
                   onContextMenu={(e) => handleContextMenu(track, e)}
                 >
                   <td className="col-num">
@@ -652,13 +677,20 @@ export default function TrackList({
                     )}
                   </td>
                   <td className="col-title">{track.title}</td>
-                  <td className="col-duration">{formatDuration(track.duration)}</td>
+                  <td className="col-duration">
+                    {formatDuration(track.duration)}
+                  </td>
                   <td className="col-actions">
                     <button
                       className="dots-btn"
                       onClick={(e) => handleDotsClick(track, e)}
                     >
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="currentColor"
+                      >
                         <circle cx="12" cy="5" r="2" />
                         <circle cx="12" cy="12" r="2" />
                         <circle cx="12" cy="19" r="2" />
@@ -669,6 +701,156 @@ export default function TrackList({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {viewMode === "videos" &&
+        (videos.length === 0 ? (
+          <div className="tracklist-empty">
+            No video files found in your library folders.
+          </div>
+        ) : (
+          <div className="album-grid">
+            {videos.map((video) => (
+              <div
+                key={video.path}
+                className="album-card"
+                onDoubleClick={() => onPlayVideo(video.path)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setVideoContextMenu({ video, x: e.clientX, y: e.clientY });
+                }}
+              >
+                <div className="album-card-cover">
+                  <div className="album-card-cover-placeholder video-placeholder">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                      <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z" />
+                    </svg>
+                  </div>
+                  <button
+                    className="album-card-play"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlayVideo(video.path);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="album-card-info">
+                  <span className="album-card-name">{video.title}</span>
+                  {video.linked_track_path && (
+                    <span className="album-card-artist video-linked-badge">Linked</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+
+      {videoContextMenu && (
+        <>
+          <div
+            className="context-menu"
+            style={{
+              position: "fixed",
+              top: videoContextMenu.y,
+              left: videoContextMenu.x,
+              zIndex: 1000,
+            }}
+          >
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                setShowTrackPicker(videoContextMenu.video);
+                setVideoContextMenu(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
+              </svg>
+              Link to track
+            </button>
+            {videoContextMenu.video.linked_track_path && (
+              <button
+                className="context-menu-item context-menu-danger"
+                onClick={() => {
+                  onUnlinkVideo(videoContextMenu.video.linked_track_path!);
+                  setVideoContextMenu(null);
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M19 13H5v-2h14v2z" />
+                </svg>
+                Unlink from track
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {showTrackPicker && (
+        <div className="playlist-picker-overlay" onMouseDown={() => setShowTrackPicker(null)}>
+          <div className="playlist-picker" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="playlist-picker-header">
+              <h3 className="playlist-picker-title">Link to track</h3>
+              <button className="playlist-picker-close" onClick={() => setShowTrackPicker(null)}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+              </button>
+            </div>
+            <div className="playlist-picker-search">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search tracks..."
+                value={trackPickerSearch}
+                onChange={(e) => setTrackPickerSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="playlist-picker-grid">
+              {(() => {
+                const filtered = tracks.filter((t) =>
+                  `${t.title} ${t.artist}`.toLowerCase().includes(trackPickerSearch.toLowerCase())
+                );
+                return filtered.length === 0 ? (
+                  <span className="playlist-picker-empty">No tracks found</span>
+                ) : (
+                  filtered.map((t) => (
+                    <button
+                      key={t.path}
+                      className="playlist-picker-card"
+                      onClick={() => {
+                        onLinkVideoToTrack(t.path, showTrackPicker.path);
+                        setShowTrackPicker(null);
+                        setTrackPickerSearch("");
+                      }}
+                    >
+                      <div className="playlist-picker-card-cover">
+                        {t.cover ? (
+                          <img src={convertFileSrc(t.cover)} alt="" />
+                        ) : (
+                          <div className="playlist-picker-card-placeholder">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <span className="playlist-picker-card-name">{t.title}</span>
+                      <span className="playlist-picker-card-meta">{t.artist}</span>
+                    </button>
+                  ))
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
 
@@ -683,6 +865,7 @@ export default function TrackList({
           onRemoveFromPlaylist={onRemoveFromPlaylist}
           onEditTrack={onEditTrack}
           onLinkLrc={onLinkLrc}
+          onLinkVideo={onLinkVideo}
         />
       )}
     </div>

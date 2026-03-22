@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Track } from "../types";
+import { Track, Playlist } from "../types";
+import ContextMenu from "./ContextMenu";
 
 interface PlayerProps {
   currentTrack: Track | null;
@@ -21,6 +22,15 @@ interface PlayerProps {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   playSource: string | null;
   onCoverClick: () => void;
+  onAddToPlaylist: (playlistId: string, track: Track) => void;
+  onRemoveFromPlaylist: (playlistId: string, trackPath: string) => void;
+  onEditTrack: (track: Track) => void;
+  onLinkLrc: (track: Track) => void;
+  onLinkVideo: (track: Track) => void;
+  playlists: Playlist[];
+  playlist: Playlist | null;
+  currentTrackVideoPath: string | null;
+  onPlayVideo: (videoPath: string) => void;
 }
 
 function formatTime(secs: number): string {
@@ -49,7 +59,17 @@ export default function Player({
   audioRef,
   playSource,
   onCoverClick,
+  onAddToPlaylist,
+  onRemoveFromPlaylist,
+  onEditTrack,
+  onLinkLrc,
+  onLinkVideo,
+  playlists,
+  playlist,
+  currentTrackVideoPath,
+  onPlayVideo,
 }: PlayerProps) {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -84,11 +104,14 @@ export default function Player({
     isSeeking.current = true;
   }, []);
 
-  const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    setSeekValue(val);
-    setCurrentTime(val);
-  }, []);
+  const handleSeekChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseFloat(e.target.value);
+      setSeekValue(val);
+      setCurrentTime(val);
+    },
+    [],
+  );
 
   const handleSeekEnd = useCallback(() => {
     if (audioRef.current) audioRef.current.currentTime = seekValue;
@@ -111,12 +134,21 @@ export default function Player({
       <div className="player-track-info">
         {currentTrack ? (
           <>
-            <div className="player-cover" onClick={onCoverClick} style={{ cursor: "pointer" }}>
+            <div
+              className="player-cover"
+              onClick={onCoverClick}
+              style={{ cursor: "pointer" }}
+            >
               {currentTrack.cover ? (
                 <img src={convertFileSrc(currentTrack.cover)} alt="" />
               ) : (
                 <div className="player-cover-placeholder">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="currentColor"
+                  >
                     <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
                   </svg>
                 </div>
@@ -183,7 +215,9 @@ export default function Player({
           <button
             className="player-btn"
             onClick={onNext}
-            disabled={queueIndex >= queue.length - 1 && repeat !== "all" && !shuffle}
+            disabled={
+              queueIndex >= queue.length - 1 && repeat !== "all" && !shuffle
+            }
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
@@ -192,14 +226,30 @@ export default function Player({
           <button
             className={`player-btn player-btn-mode${repeat !== "off" ? " active" : ""}`}
             onClick={onRepeatCycle}
-            title={repeat === "off" ? "Repeat off" : repeat === "all" ? "Repeat all" : "Repeat one"}
+            title={
+              repeat === "off"
+                ? "Repeat off"
+                : repeat === "all"
+                  ? "Repeat all"
+                  : "Repeat one"
+            }
           >
             {repeat === "one" ? (
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="currentColor"
+              >
                 <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z" />
               </svg>
             ) : (
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="currentColor"
+              >
                 <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
               </svg>
             )}
@@ -225,6 +275,17 @@ export default function Player({
       </div>
 
       <div className="player-volume">
+        {currentTrack && currentTrackVideoPath && (
+          <button
+            className="player-btn player-btn-mode"
+            onClick={() => onPlayVideo(currentTrackVideoPath)}
+            title="Watch music video"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z" />
+            </svg>
+          </button>
+        )}
         {currentTrack && (
           <button
             className={`player-btn player-btn-mode${hasLrc && lyricsVisible ? " active" : ""}`}
@@ -234,6 +295,22 @@ export default function Player({
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+            </svg>
+          </button>
+        )}
+        {currentTrack && (
+          <button
+            className="player-btn player-btn-mode"
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setContextMenu({ x: rect.left, y: rect.top });
+            }}
+            title="More options"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="12" cy="19" r="2" />
             </svg>
           </button>
         )}
@@ -250,6 +327,20 @@ export default function Player({
           className="volume-slider"
         />
       </div>
+      {contextMenu && currentTrack && (
+        <ContextMenu
+          track={currentTrack}
+          playlist={playlist}
+          playlists={playlists}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+          onAddToPlaylist={onAddToPlaylist}
+          onRemoveFromPlaylist={onRemoveFromPlaylist}
+          onEditTrack={onEditTrack}
+          onLinkLrc={onLinkLrc}
+          onLinkVideo={onLinkVideo}
+        />
+      )}
     </div>
   );
 }

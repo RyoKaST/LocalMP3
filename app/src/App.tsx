@@ -10,7 +10,8 @@ import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior, type 
 import LrcCreator from "./components/LrcCreator";
 import Lyrics from "./components/Lyrics";
 import FullscreenPlayer from "./components/FullscreenPlayer";
-import { Track, Playlist } from "./types";
+import VideoPlayer from "./components/VideoPlayer";
+import { Track, Playlist, VideoFile } from "./types";
 import "./App.css";
 
 function App() {
@@ -49,6 +50,10 @@ function App() {
   const [fullscreenControls, setFullscreenControls] = useState<FullscreenControls>(
     () => (localStorage.getItem("fullscreenControls") as FullscreenControls) || "auto-hide"
   );
+  const [videos, setVideos] = useState<VideoFile[]>([]);
+  const [activeVideo, setActiveVideo] = useState<string | null>(null);
+  const [activeVideoLinked, setActiveVideoLinked] = useState(false);
+  const [currentTrackVideoPath, setCurrentTrackVideoPath] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -88,12 +93,27 @@ function App() {
     setTracks(allTracks);
   }
 
+  async function scanAllVideos(paths: string[]) {
+    const allVideos: VideoFile[] = [];
+    for (const p of paths) {
+      try {
+        const result = await invoke<VideoFile[]>("scan_videos", { path: p });
+        allVideos.push(...result);
+      } catch (e) {
+        console.error(`Failed to scan videos in ${p}:`, e);
+      }
+    }
+    allVideos.sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+    setVideos(allVideos);
+  }
+
   async function loadSavedLibrary() {
     try {
       const paths = await invoke<string[]>("get_library_paths");
       setLibraryPaths(paths);
       if (paths.length > 0) {
         await scanAllPaths(paths);
+        await scanAllVideos(paths);
       }
     } catch (e) {
       console.error("Failed to load library:", e);
@@ -116,6 +136,7 @@ function App() {
         const paths = await invoke<string[]>("add_library_path", { path: folder });
         setLibraryPaths(paths);
         await scanAllPaths(paths);
+        await scanAllVideos(paths);
       } catch (e) {
         console.error("Add folder error:", e);
       }
@@ -127,6 +148,7 @@ function App() {
       const paths = await invoke<string[]>("remove_library_path", { path });
       setLibraryPaths(paths);
       await scanAllPaths(paths);
+      await scanAllVideos(paths);
     } catch (e) {
       console.error("Remove folder error:", e);
     }
@@ -448,6 +470,52 @@ function App() {
     }
   }
 
+  // Video linking handlers
+  async function handleLinkVideo(trackPath: string, videoPath: string) {
+    try {
+      await invoke("link_video", { trackPath, videoPath });
+      await scanAllVideos(libraryPaths);
+      // Update currentTrackVideoPath if this is the current track
+      if (currentTrack?.path === trackPath) {
+        setCurrentTrackVideoPath(videoPath);
+      }
+    } catch (e) {
+      console.error("Failed to link video:", e);
+    }
+  }
+
+  async function handleUnlinkVideo(trackPath: string) {
+    try {
+      await invoke("unlink_video", { trackPath });
+      await scanAllVideos(libraryPaths);
+      if (currentTrack?.path === trackPath) {
+        setCurrentTrackVideoPath(null);
+      }
+    } catch (e) {
+      console.error("Failed to unlink video:", e);
+    }
+  }
+
+  async function handleLinkVideoFile(track: Track) {
+    const file = await open({
+      filters: [{ name: "Videos", extensions: ["mp4", "mkv", "webm", "avi", "mov"] }],
+    });
+    if (file) {
+      await handleLinkVideo(track.path, file as string);
+    }
+  }
+
+  // Track video path for currently playing track
+  useEffect(() => {
+    if (!currentTrack) {
+      setCurrentTrackVideoPath(null);
+      return;
+    }
+    invoke<string | null>("get_video_for_track", { trackPath: currentTrack.path })
+      .then(setCurrentTrackVideoPath)
+      .catch(() => setCurrentTrackVideoPath(null));
+  }, [currentTrack]);
+
   const currentPlaylist =
     currentView !== "library"
       ? playlists.find((p) => p.id === currentView) || null
@@ -525,8 +593,16 @@ function App() {
             onPickCover={handlePickCover}
             onEditTrack={setEditingTrack}
             onLinkLrc={handleLinkLrcForTrack}
+            onLinkVideo={handleLinkVideoFile}
             libraryClickBehavior={libraryClickBehavior}
             libraryResetKey={libraryResetKey}
+            videos={videos}
+            onPlayVideo={(path) => {
+              setActiveVideo(path);
+              setActiveVideoLinked(false);
+            }}
+            onLinkVideoToTrack={handleLinkVideo}
+            onUnlinkVideo={handleUnlinkVideo}
           />
         )}
       </main>
@@ -576,6 +652,18 @@ function App() {
         onCoverClick={() => {
           if (currentTrack) setFullscreenVisible(true);
         }}
+        onAddToPlaylist={handleAddToPlaylist}
+        onRemoveFromPlaylist={handleRemoveFromPlaylist}
+        onEditTrack={setEditingTrack}
+        onLinkLrc={handleLinkLrcForTrack}
+        onLinkVideo={handleLinkVideoFile}
+        playlists={playlists}
+        playlist={currentPlaylist}
+        currentTrackVideoPath={currentTrackVideoPath}
+        onPlayVideo={(path) => {
+          setActiveVideo(path);
+          setActiveVideoLinked(true);
+        }}
       />
       {fullscreenVisible && currentTrack && (
         <FullscreenPlayer
@@ -590,6 +678,21 @@ function App() {
           onShuffleToggle={() => setShuffle((s) => !s)}
           onRepeatCycle={() => setRepeat((r) => r === "off" ? "all" : r === "all" ? "one" : "off")}
           onClose={() => setFullscreenVisible(false)}
+        />
+      )}
+      {activeVideo && (
+        <VideoPlayer
+          videoPath={activeVideo}
+          onClose={() => {
+            setActiveVideo(null);
+            // Sync App's isPlaying state with actual audio element state
+            if (audioRef.current) {
+              setIsPlaying(!audioRef.current.paused);
+            }
+          }}
+          audioRef={activeVideoLinked ? audioRef : undefined}
+          isAudioPlaying={activeVideoLinked ? isPlaying : undefined}
+          onAudioPlayPause={activeVideoLinked ? togglePlayPause : undefined}
         />
       )}
     </div>

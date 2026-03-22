@@ -14,6 +14,12 @@ export interface LrcLine {
   text: string;
 }
 
+export interface VideoFile {
+  title: string;
+  path: string;
+  linked_track_path: string | null;
+}
+
 export interface Playlist {
   id: string;
   name: string;

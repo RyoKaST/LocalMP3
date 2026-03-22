@@ -24,6 +24,13 @@ pub struct Track {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct VideoFile {
+    title: String,
+    path: String,
+    linked_track_path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Playlist {
     id: String,
     name: String,
@@ -45,6 +52,11 @@ struct AppData {
     /// LRC playback speed per track: audio path -> speed multiplier
     #[serde(default)]
     lrc_speeds: std::collections::HashMap<String, f64>,
+    #[serde(default)]
+    video_links: std::collections::HashMap<String, String>,
+    /// Video audio offsets: video_path -> offset in seconds
+    #[serde(default)]
+    video_offsets: std::collections::HashMap<String, f64>,
 }
 
 impl Default for AppData {
@@ -55,6 +67,8 @@ impl Default for AppData {
             library_path: None,
             lrc_links: std::collections::HashMap::new(),
             lrc_speeds: std::collections::HashMap::new(),
+            video_links: std::collections::HashMap::new(),
+            video_offsets: std::collections::HashMap::new(),
         }
     }
 }
@@ -539,6 +553,84 @@ fn delete_track_file(track_path: String) -> Result<(), String> {
     fs::remove_file(path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn scan_videos(app: tauri::AppHandle, path: String) -> Vec<VideoFile> {
+    let data = load_data(&app);
+    let mut videos = Vec::new();
+    for entry in WalkDir::new(&path) {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+        if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
+            match ext.to_lowercase().as_str() {
+                "mp4" | "mkv" | "webm" | "avi" | "mov" => {
+                    let file_path = entry.path().to_string_lossy().to_string();
+                    let title = entry
+                        .path()
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "Unknown".to_string());
+                    let linked_track = data
+                        .video_links
+                        .iter()
+                        .find(|(_, v)| **v == file_path)
+                        .map(|(k, _)| k.clone());
+                    videos.push(VideoFile {
+                        title,
+                        path: file_path,
+                        linked_track_path: linked_track,
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+    videos.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    videos
+}
+
+#[tauri::command]
+fn link_video(app: tauri::AppHandle, track_path: String, video_path: String) -> Result<(), String> {
+    if !Path::new(&video_path).exists() {
+        return Err("Video file does not exist".to_string());
+    }
+    let mut data = load_data(&app);
+    data.video_links.insert(track_path, video_path);
+    save_data(&app, &data);
+    Ok(())
+}
+
+#[tauri::command]
+fn unlink_video(app: tauri::AppHandle, track_path: String) {
+    let mut data = load_data(&app);
+    data.video_links.remove(&track_path);
+    save_data(&app, &data);
+}
+
+#[tauri::command]
+fn get_video_for_track(app: tauri::AppHandle, track_path: String) -> Option<String> {
+    let data = load_data(&app);
+    data.video_links.get(&track_path).cloned()
+}
+
+#[tauri::command]
+fn set_video_offset(app: tauri::AppHandle, video_path: String, offset: f64) {
+    let mut data = load_data(&app);
+    if offset.abs() < 0.001 {
+        data.video_offsets.remove(&video_path);
+    } else {
+        data.video_offsets.insert(video_path, offset);
+    }
+    save_data(&app, &data);
+}
+
+#[tauri::command]
+fn get_video_offset(app: tauri::AppHandle, video_path: String) -> f64 {
+    let data = load_data(&app);
+    data.video_offsets.get(&video_path).copied().unwrap_or(0.0)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -564,6 +656,12 @@ pub fn run() {
             search_lrc_online,
             set_lrc_speed,
             get_lrc_speed,
+            scan_videos,
+            link_video,
+            unlink_video,
+            get_video_for_track,
+            set_video_offset,
+            get_video_offset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
