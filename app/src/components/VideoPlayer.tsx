@@ -409,19 +409,12 @@ export default function VideoPlayer({
               <div
                 className="video-sync-marker"
                 style={{ left: `${(audioOffset / duration) * 100}%` }}
-                title={`Song starts at ${formatTime(audioOffset)}`}
+                title={`Song starts at ${audioOffset.toFixed(1)}s`}
               />
             )}
           </div>
           <span className="fs-time">{formatTime(duration)}</span>
         </div>
-        {hasLinkedAudio && audioOffset !== 0 && (
-          <div className="video-offset-indicator">
-            {audioOffset > 0
-              ? `Song starts at ${formatTime(audioOffset)} in video`
-              : `Song starts ${formatTime(Math.abs(audioOffset))} before video`}
-          </div>
-        )}
         <div className="fs-buttons">
           <button className="fs-btn fs-btn-play" onClick={togglePlayPause}>
             {isPlaying ? (
@@ -444,6 +437,13 @@ export default function VideoPlayer({
               </svg>
             )}
           </button>
+          {hasLinkedAudio && audioOffset !== 0 && (
+            <div className="video-offset-indicator">
+              {audioOffset > 0
+                ? `Song starts at ${audioOffset.toFixed(1)}s in video`
+                : `Song starts ${Math.abs(audioOffset).toFixed(1)}s before video`}
+            </div>
+          )}
         </div>
         <div className="fs-volume">
           {hasLinkedAudio && (

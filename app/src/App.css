@@ -3011,9 +3011,10 @@ td.col-actions {
 
 .fs-buttons {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 4px;
 }
 
 .fs-btn {
@@ -3304,9 +3305,9 @@ td.col-actions {
 
 /* Offset indicator text */
 .video-offset-indicator {
-  text-align: center;
   font-size: 11px;
-  color: var(--accent);
-  font-weight: 500;
-  margin-top: -2px;
+  color: #ffffff;
+  font-weight: 600;
+  margin-top: 2px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
