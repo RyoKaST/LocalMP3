@@ -457,29 +457,34 @@ body {
 }
 
 .tracklist-reorder-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  margin-top: 4px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: none;
+  gap: 4px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--hover-bg-strong);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.tracklist-reorder-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 .tracklist-reorder-btn:hover {
-  background: var(--hover-bg-strong);
+  background: var(--border-subtle);
   color: var(--text-primary);
 }
 
 .tracklist-reorder-btn.active {
   background: var(--accent);
   color: #fff;
-  border-color: var(--accent);
 }
 
 .col-drag-handle {

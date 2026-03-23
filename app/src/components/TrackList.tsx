@@ -407,17 +407,17 @@ export default function TrackList({
             <span className="tracklist-meta">
               {playlist.tracks.length} track
               {playlist.tracks.length !== 1 ? "s" : ""}
+              <button
+                className={`tracklist-reorder-btn${reorderMode ? " active" : ""}`}
+                onClick={() => setReorderMode((r) => !r)}
+                title={reorderMode ? "Done reordering" : "Edit order"}
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z" />
+                </svg>
+                {reorderMode ? "Done" : "Reorder"}
+              </button>
             </span>
-            <button
-              className={`tracklist-reorder-btn${reorderMode ? " active" : ""}`}
-              onClick={() => setReorderMode((r) => !r)}
-              title={reorderMode ? "Done reordering" : "Edit order"}
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z" />
-              </svg>
-              {reorderMode ? "Done" : "Edit order"}
-            </button>
           </div>
           <div className="tracklist-search-wrapper">
             <div className="tracklist-search">
