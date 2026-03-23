@@ -44,7 +44,6 @@ export function extractDominantColors(imageUrl: string): Promise<string[]> {
         const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
         const data = imageData.data;
 
-        // Buckets: dark (0-85), mid (85-170), bright (170-255)
         const buckets: { r: number; g: number; b: number; count: number }[] = [
           { r: 0, g: 0, b: 0, count: 0 },
           { r: 0, g: 0, b: 0, count: 0 },
@@ -57,7 +56,6 @@ export function extractDominantColors(imageUrl: string): Promise<string[]> {
           const b = data[i + 2];
           const a = data[i + 3];
 
-          // Skip fully transparent pixels
           if (a < 10) continue;
 
           const br = brightness(r, g, b);
@@ -89,7 +87,6 @@ export function extractDominantColors(imageUrl: string): Promise<string[]> {
           }
         }
 
-        // Pad with fallback colors if we have fewer than 2
         let idx = 0;
         while (colors.length < 2) {
           colors.push(FALLBACK_COLORS[idx]);

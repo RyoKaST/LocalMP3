@@ -16,7 +16,6 @@ export function useLyricsSync({ lrcPath, trackPath, audioRef, enabled = true }: 
   const speedRef = useRef(1);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load LRC file
   useEffect(() => {
     if (!lrcPath) {
       setLines([]);
@@ -27,7 +26,6 @@ export function useLyricsSync({ lrcPath, trackPath, audioRef, enabled = true }: 
       .catch(() => setLines([]));
   }, [lrcPath]);
 
-  // Load saved speed when track changes
   useEffect(() => {
     invoke<number>("get_lrc_speed", { trackPath }).then((s) => {
       setSpeedState(s);
@@ -35,7 +33,6 @@ export function useLyricsSync({ lrcPath, trackPath, audioRef, enabled = true }: 
     });
   }, [trackPath]);
 
-  // RAF-based tick loop for syncing lyrics with audio currentTime
   useEffect(() => {
     const audio = audioRef.current;
     if (!enabled || !audio || lines.length === 0) return;
@@ -64,7 +61,6 @@ export function useLyricsSync({ lrcPath, trackPath, audioRef, enabled = true }: 
     return () => cancelAnimationFrame(rafId);
   }, [audioRef, lines, enabled]);
 
-  // Cleanup debounce timeout on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -75,7 +71,6 @@ export function useLyricsSync({ lrcPath, trackPath, audioRef, enabled = true }: 
     (v: number) => {
       setSpeedState(v);
       speedRef.current = v;
-      // Debounce save to avoid spamming during drag
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         invoke("set_lrc_speed", { trackPath, speed: v });

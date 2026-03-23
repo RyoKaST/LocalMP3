@@ -43,18 +43,17 @@ struct AppData {
     playlists: Vec<Playlist>,
     #[serde(default)]
     library_paths: Vec<String>,
-    // Legacy field for migration
     #[serde(default)]
     library_path: Option<String>,
-    /// Manual LRC links: audio path -> lrc path
+    /// audio path -> lrc path
     #[serde(default)]
     lrc_links: std::collections::HashMap<String, String>,
-    /// LRC playback speed per track: audio path -> speed multiplier
+    /// audio path -> speed multiplier
     #[serde(default)]
     lrc_speeds: std::collections::HashMap<String, f64>,
     #[serde(default)]
     video_links: std::collections::HashMap<String, String>,
-    /// Video audio offsets: video_path -> offset in seconds
+    /// video_path -> offset in seconds
     #[serde(default)]
     video_offsets: std::collections::HashMap<String, f64>,
 }
@@ -73,7 +72,6 @@ impl Default for AppData {
     }
 }
 
-/// Migrate old single library_path to library_paths if needed
 fn migrate_data(data: &mut AppData) -> bool {
     if let Some(path) = data.library_path.take() {
         if !data.library_paths.contains(&path) {
@@ -124,7 +122,6 @@ fn extract_cover(tag: &lofty::tag::Tag, cache_dir: &std::path::Path) -> Option<S
         return None;
     }
 
-    // Hash the image data to deduplicate covers (same album = same image)
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
     let hash = hasher.finish();
@@ -139,7 +136,6 @@ fn extract_cover(tag: &lofty::tag::Tag, cache_dir: &std::path::Path) -> Option<S
 
     let cover_path = cache_dir.join(format!("{:x}.{}", hash, ext));
 
-    // Only write if not already cached
     if !cover_path.exists() {
         fs::write(&cover_path, data).ok()?;
     }
@@ -196,7 +192,6 @@ fn scan_library(app: tauri::AppHandle, path: String) -> Vec<Track> {
             match ext.to_lowercase().as_str() {
                 "mp3" | "flac" | "ogg" | "wav" | "m4a" | "aac" | "wma" => {
                     if let Some(mut track) = read_track_metadata(entry.path(), &cover_cache) {
-                        // Manual LRC link overrides auto-detected one
                         if let Some(manual_lrc) = data.lrc_links.get(&track.path) {
                             if Path::new(manual_lrc).exists() {
                                 track.lrc_path = Some(manual_lrc.clone());
@@ -323,6 +318,29 @@ fn remove_from_playlist(
 }
 
 #[tauri::command]
+fn reorder_playlist_track(
+    app: tauri::AppHandle,
+    id: String,
+    from_index: usize,
+    to_index: usize,
+) -> Option<Playlist> {
+    let mut data = load_data(&app);
+    if let Some(playlist) = data.playlists.iter_mut().find(|p| p.id == id) {
+        let len = playlist.tracks.len();
+        if from_index >= len || to_index >= len || from_index == to_index {
+            return Some(playlist.clone());
+        }
+        let track = playlist.tracks.remove(from_index);
+        playlist.tracks.insert(to_index, track);
+        let updated = playlist.clone();
+        save_data(&app, &data);
+        Some(updated)
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
 fn update_track_metadata(
     app: tauri::AppHandle,
     track_path: String,
@@ -365,7 +383,6 @@ fn update_track_metadata(
     tag.save_to_path(path, lofty::config::WriteOptions::default())
         .map_err(|e| e.to_string())?;
 
-    // Re-read the track to return updated metadata
     let cover_cache = app.path().app_data_dir().unwrap().join("covers");
     fs::create_dir_all(&cover_cache).ok();
     read_track_metadata(path, &cover_cache).ok_or("Failed to re-read metadata".to_string())
@@ -386,11 +403,9 @@ fn read_lrc(lrc_path: String) -> Result<Vec<LrcLine>, String> {
         if !line.starts_with('[') {
             continue;
         }
-        // Parse [mm:ss.xx] text
         if let Some(bracket_end) = line.find(']') {
             let tag = &line[1..bracket_end];
             let text = line[bracket_end + 1..].trim().to_string();
-            // Skip metadata tags like [ar:Artist]
             if tag.chars().next().map_or(true, |c| !c.is_ascii_digit()) {
                 continue;
             }
@@ -406,7 +421,6 @@ fn read_lrc(lrc_path: String) -> Result<Vec<LrcLine>, String> {
 }
 
 fn parse_lrc_time(tag: &str) -> Option<f64> {
-    // Formats: mm:ss.xx or mm:ss
     let parts: Vec<&str> = tag.split(':').collect();
     if parts.len() != 2 {
         return None;
@@ -458,7 +472,6 @@ async fn search_lrc_online(
 ) -> Result<Option<String>, String> {
     let client = reqwest::Client::new();
 
-    // First try the precise get endpoint with duration
     let get_url = format!(
         "https://lrclib.net/api/get?artist_name={}&track_name={}&duration={}",
         urlencod(&artist_name),
@@ -483,7 +496,6 @@ async fn search_lrc_online(
         }
     }
 
-    // Fallback: search endpoint
     let search_url = format!(
         "https://lrclib.net/api/search?q={}",
         urlencod(&format!("{} {}", track_name, artist_name)),
@@ -497,7 +509,6 @@ async fn search_lrc_online(
 
     let results: Vec<LrcSearchResult> = resp.json().await.map_err(|e| e.to_string())?;
 
-    // Prefer synced lyrics, fall back to plain
     for r in &results {
         if r.synced_lyrics.is_some() {
             return Ok(r.synced_lyrics.clone());
@@ -610,8 +621,15 @@ fn unlink_video(app: tauri::AppHandle, track_path: String) {
 
 #[tauri::command]
 fn get_video_for_track(app: tauri::AppHandle, track_path: String) -> Option<String> {
-    let data = load_data(&app);
-    data.video_links.get(&track_path).cloned()
+    let mut data = load_data(&app);
+    if let Some(video_path) = data.video_links.get(&track_path).cloned() {
+        if Path::new(&video_path).exists() {
+            return Some(video_path);
+        }
+        data.video_links.remove(&track_path);
+        save_data(&app, &data);
+    }
+    None
 }
 
 #[tauri::command]
@@ -631,6 +649,107 @@ fn get_video_offset(app: tauri::AppHandle, video_path: String) -> f64 {
     data.video_offsets.get(&video_path).copied().unwrap_or(0.0)
 }
 
+#[tauri::command]
+fn get_converted_video(app: tauri::AppHandle, video_path: String) -> Option<String> {
+    let ext = Path::new(&video_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext == "mp4" || ext == "mov" {
+        return None;
+    }
+    let converted_path = get_converted_path(&app, &video_path);
+    if converted_path.exists() {
+        Some(converted_path.to_string_lossy().to_string())
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<String, String> {
+    let ext = Path::new(&video_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext == "mp4" || ext == "mov" {
+        return Ok(video_path);
+    }
+
+    let converted_path = get_converted_path(&app, &video_path);
+    if converted_path.exists() {
+        return Ok(converted_path.to_string_lossy().to_string());
+    }
+
+    if let Some(parent) = converted_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+
+    let tmp_path = converted_path.with_extension("tmp.mp4");
+
+    let output = std::process::Command::new("ffmpeg")
+        .args([
+            "-i", &video_path,
+            "-c:v", "copy",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            "-y",
+            &tmp_path.to_string_lossy(),
+        ])
+        .output();
+
+    let success = match &output {
+        Ok(o) => o.status.success(),
+        Err(_) => false,
+    };
+
+    if success && tmp_path.exists() {
+        fs::rename(&tmp_path, &converted_path)
+            .map_err(|e| format!("Failed to rename converted file: {}", e))?;
+        return Ok(converted_path.to_string_lossy().to_string());
+    }
+
+    let _ = fs::remove_file(&tmp_path);
+    let output = std::process::Command::new("ffmpeg")
+        .args([
+            "-i", &video_path,
+            "-c:v", "libx264",
+            "-crf", "0",       // lossless
+            "-preset", "fast",
+            "-c:a", "aac",
+            "-b:a", "320k",
+            "-movflags", "+faststart",
+            "-y",
+            &tmp_path.to_string_lossy(),
+        ])
+        .output()
+        .map_err(|e| format!("ffmpeg not found or failed to run: {}. Install with: brew install ffmpeg", e))?;
+
+    if !output.status.success() {
+        let _ = fs::remove_file(&tmp_path);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffmpeg conversion failed: {}", stderr));
+    }
+
+    fs::rename(&tmp_path, &converted_path)
+        .map_err(|e| format!("Failed to rename converted file: {}", e))?;
+    Ok(converted_path.to_string_lossy().to_string())
+}
+
+fn get_converted_path(app: &tauri::AppHandle, video_path: &str) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    video_path.hash(&mut hasher);
+    let hash = hasher.finish();
+    let stem = Path::new(video_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("video");
+    let dir = app.path().app_data_dir().unwrap().join("converted_videos");
+    dir.join(format!("{}_{:x}.mp4", stem, hash))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -647,6 +766,7 @@ pub fn run() {
             delete_playlist,
             add_to_playlist,
             remove_from_playlist,
+            reorder_playlist_track,
             update_track_metadata,
             delete_track_file,
             read_lrc,
@@ -662,6 +782,8 @@ pub fn run() {
             get_video_for_track,
             set_video_offset,
             get_video_offset,
+            get_converted_video,
+            convert_video,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

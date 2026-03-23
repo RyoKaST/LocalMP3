@@ -81,7 +81,6 @@ function getParentDir(filePath: string, libraryPaths: string[]): string {
   for (const lp of libraryPaths) {
     if (filePath.startsWith(lp)) return lp;
   }
-  // Fallback: return the immediate parent directory
   const sep = filePath.includes("/") ? "/" : "\\";
   return filePath.substring(0, filePath.lastIndexOf(sep));
 }
@@ -99,7 +98,6 @@ function ColorPicker({ color, onChange }: { color: string; onChange: (c: string)
   const hueRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<"sv" | "hue" | null>(null);
 
-  // Sync if color changes externally (preset click)
   const lastExternal = useRef(color);
   if (color !== lastExternal.current) {
     lastExternal.current = color;
@@ -278,7 +276,6 @@ export default function Settings({
     const IGNORED = new Set(["unknown", ""]);
     const exactKeys = new Set(dupeGroups.map((g) => g.key));
 
-    // Group tracks by title across different directories
     const byTitle = new Map<string, (Track & { directory: string })[]>();
     for (const track of tracks) {
       const title = track.title.toLowerCase();
@@ -294,7 +291,6 @@ export default function Settings({
       const dirs = new Set(entries.map((e) => e.directory));
       if (dirs.size < 2) continue;
 
-      // Exclude groups where all entries are the same title+artist (already in exact dupes)
       const byArtist = new Map<string, typeof entries>();
       for (const e of entries) {
         const key = `${title}::${e.artist.toLowerCase()}`;
@@ -302,7 +298,6 @@ export default function Settings({
         arr.push(e);
         byArtist.set(key, arr);
       }
-      // If every entry maps to a single exact-dupe key, skip
       if ([...byArtist.keys()].every((k) => exactKeys.has(k)) && byArtist.size === 1) continue;
 
       results.push({ title: entries[0].title, tracks: entries });

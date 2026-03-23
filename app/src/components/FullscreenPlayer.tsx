@@ -4,7 +4,6 @@ import { Track } from "../types";
 import { useLyricsSync } from "../hooks/useLyricsSync";
 import { extractDominantColors } from "../utils/colorExtract";
 
-// Exported types for Settings and App
 export type FullscreenLayout = "side-by-side" | "cover" | "karaoke";
 export type FullscreenBackground = "blurred-cover" | "color-gradient" | "dark-accent";
 export type FullscreenControls = "full" | "minimal" | "auto-hide";
@@ -43,7 +42,6 @@ export default function FullscreenPlayer({
   onRepeatCycle,
   onClose,
 }: FullscreenPlayerProps) {
-  // Settings from localStorage
   const [layout, setLayout] = useState<FullscreenLayout>(() =>
     (localStorage.getItem("fullscreenLayout") as FullscreenLayout) || "side-by-side"
   );
@@ -54,25 +52,20 @@ export default function FullscreenPlayer({
     (localStorage.getItem("fullscreenControls") as FullscreenControls) || "auto-hide"
   );
 
-  // Audio state
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(() => audioRef.current?.volume ?? 1);
   const [seekValue, setSeekValue] = useState(0);
   const isSeeking = useRef(false);
 
-  // Animation state
   const [isEntering, setIsEntering] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
 
-  // Auto-hide controls
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Gradient colors for color-gradient background
   const [gradientColors, setGradientColors] = useState<string[]>([]);
 
-  // Lyrics
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const hasLyrics = !!currentTrack.lrc_path;
   const { lines, currentLine, seekToLine } = useLyricsSync({
@@ -82,10 +75,8 @@ export default function FullscreenPlayer({
     enabled: hasLyrics,
   });
 
-  // Cover URL
   const coverUrl = currentTrack.cover ? convertFileSrc(currentTrack.cover) : null;
 
-  // Enter animation
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       setIsEntering(false);
@@ -93,7 +84,6 @@ export default function FullscreenPlayer({
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Audio time tracking
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -120,13 +110,11 @@ export default function FullscreenPlayer({
     };
   }, [audioRef]);
 
-  // Escape key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         handleClose();
       }
-      // Any keydown resets auto-hide timer
       if (controlsMode === "auto-hide") {
         showControls();
       }
@@ -135,7 +123,6 @@ export default function FullscreenPlayer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [controlsMode]);
 
-  // Auto-hide controls logic
   const showControls = useCallback(() => {
     setControlsVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -150,7 +137,6 @@ export default function FullscreenPlayer({
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       return;
     }
-    // Start the auto-hide timer
     showControls();
     return () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -163,14 +149,12 @@ export default function FullscreenPlayer({
     }
   }, [controlsMode, showControls]);
 
-  // Extract gradient colors
   useEffect(() => {
     if (background === "color-gradient" && coverUrl) {
       extractDominantColors(coverUrl).then(setGradientColors);
     }
   }, [background, coverUrl]);
 
-  // Scroll active lyric line into view
   useEffect(() => {
     if (currentLine < 0 || !lyricsContainerRef.current) return;
     const container = lyricsContainerRef.current;
@@ -180,7 +164,6 @@ export default function FullscreenPlayer({
     }
   }, [currentLine]);
 
-  // Re-read settings from localStorage when they might change
   useEffect(() => {
     const handleStorage = () => {
       setLayout((localStorage.getItem("fullscreenLayout") as FullscreenLayout) || "side-by-side");
@@ -191,7 +174,6 @@ export default function FullscreenPlayer({
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // Seek handlers
   const handleSeekStart = useCallback(() => {
     isSeeking.current = true;
   }, []);
@@ -216,7 +198,6 @@ export default function FullscreenPlayer({
     [audioRef],
   );
 
-  // Close with exit animation
   const handleClose = useCallback(() => {
     if (isClosing) return;
     setIsClosing(true);
@@ -232,7 +213,6 @@ export default function FullscreenPlayer({
   const isMinimal = controlsMode === "minimal";
   const shouldHideControls = controlsMode === "auto-hide" && !controlsVisible;
 
-  // Render background
   const renderBackground = () => {
     if (background === "blurred-cover") {
       return (
@@ -251,11 +231,9 @@ export default function FullscreenPlayer({
       };
       return <div className="fs-bg fs-bg-gradient" style={gradientStyle} />;
     }
-    // dark-accent
     return <div className="fs-bg fs-bg-dark" />;
   };
 
-  // Render cover image or placeholder
   const renderCover = (sizeClass: string) => {
     if (coverUrl) {
       return (
@@ -273,7 +251,6 @@ export default function FullscreenPlayer({
     );
   };
 
-  // Render lyrics lines
   const renderLyrics = (className: string) => {
     if (!hasLyrics || lines.length === 0) return null;
     return (
@@ -291,7 +268,6 @@ export default function FullscreenPlayer({
     );
   };
 
-  // Render track info
   const renderTrackInfo = () => (
     <div className="fs-track-info">
       <div className="fs-track-title">{currentTrack.title}</div>
@@ -299,7 +275,6 @@ export default function FullscreenPlayer({
     </div>
   );
 
-  // Layout content
   const renderContent = () => {
     if (layout === "side-by-side") {
       if (hasLyrics && lines.length > 0) {
@@ -313,7 +288,6 @@ export default function FullscreenPlayer({
           </div>
         );
       }
-      // No lyrics: centered large cover
       return (
         <div className="fs-layout-centered">
           {renderCover("fs-cover-large")}
@@ -332,7 +306,6 @@ export default function FullscreenPlayer({
       );
     }
 
-    // Karaoke
     if (hasLyrics && lines.length > 0) {
       return (
         <div className="fs-layout-karaoke">
@@ -344,7 +317,6 @@ export default function FullscreenPlayer({
         </div>
       );
     }
-    // Karaoke fallback: centered cover
     return (
       <div className="fs-layout-centered">
         {renderCover("fs-cover-large")}
@@ -353,7 +325,6 @@ export default function FullscreenPlayer({
     );
   };
 
-  // Render controls
   const renderControls = () => {
     return (
       <div className={`fs-controls${shouldHideControls ? " hidden" : ""}`}>

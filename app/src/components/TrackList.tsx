@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Track, Playlist, VideoFile } from "../types";
 import ContextMenu from "./ContextMenu";
@@ -25,6 +25,7 @@ interface TrackListProps {
   onPlayVideo: (videoPath: string) => void;
   onLinkVideoToTrack: (trackPath: string, videoPath: string) => void;
   onUnlinkVideo: (trackPath: string) => void;
+  onReorderTrack: (playlistId: string, fromIndex: number, toIndex: number) => void;
 }
 
 function formatDuration(secs: number): string {
@@ -58,6 +59,26 @@ interface Album {
 
 type ViewMode = "songs" | "albums" | "videos";
 
+function DropIndicator({ tbodyRef, dragState }: {
+  tbodyRef: React.RefObject<HTMLTableSectionElement | null>;
+  dragState: { fromIndex: number; overIndex: number };
+}) {
+  const tbody = tbodyRef.current;
+  if (!tbody) return null;
+  const rows = tbody.children;
+  const targetRow = rows[dragState.overIndex] as HTMLElement | undefined;
+  if (!targetRow) return null;
+  const draggingDown = dragState.fromIndex < dragState.overIndex;
+  const rect = targetRow.getBoundingClientRect();
+  const y = draggingDown ? rect.bottom : rect.top;
+  return (
+    <div
+      className="drop-indicator"
+      style={{ position: "fixed", top: y - 1, left: rect.left, width: rect.width }}
+    />
+  );
+}
+
 export default function TrackList({
   tracks,
   playlist,
@@ -78,10 +99,19 @@ export default function TrackList({
   onPlayVideo,
   onLinkVideoToTrack,
   onUnlinkVideo,
+  onReorderTrack,
 }: TrackListProps) {
-  const [sortKey, setSortKey] = useState<SortKey>("title");
+  const [sortKey, setSortKey] = useState<SortKey | null>(playlist ? null : "title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [reorderMode, setReorderMode] = useState(false);
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const [dragState, setDragState] = useState<{
+    fromIndex: number;
+    overIndex: number;
+  } | null>(null);
+  const dragRef = useRef<{ fromIndex: number; overIndex: number } | null>(null);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
   const rawTracks = playlist ? playlist.tracks : tracks;
 
   const filteredTracks = useMemo(() => {
@@ -95,7 +125,88 @@ export default function TrackList({
     );
   }, [rawTracks, searchQuery]);
 
-  const displayTracks = sortTracks(filteredTracks, sortKey, sortDir);
+  const displayTracks = playlist
+    ? (reorderMode ? rawTracks : filteredTracks)
+    : sortTracks(filteredTracks, sortKey || "title", sortDir);
+
+  const getOverIndex = useCallback((clientY: number): number => {
+    const tbody = tbodyRef.current;
+    if (!tbody) return 0;
+    const rows = Array.from(tbody.children) as HTMLElement[];
+    for (let i = 0; i < rows.length; i++) {
+      const rect = rows[i].getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) return i;
+    }
+    return rows.length - 1;
+  }, []);
+
+  const createGhost = useCallback((sourceRow: HTMLElement, clientY: number) => {
+    const rect = sourceRow.getBoundingClientRect();
+    const ghost = document.createElement("div");
+    ghost.className = "drag-ghost";
+    ghost.style.width = rect.width + "px";
+    ghost.style.top = clientY - rect.height / 2 + "px";
+    ghost.style.left = rect.left + "px";
+
+    const cells = sourceRow.querySelectorAll("td");
+    cells.forEach((cell) => {
+      if (cell.classList.contains("col-drag-handle")) return;
+      const clone = document.createElement("span");
+      clone.className = "drag-ghost-cell";
+      clone.textContent = cell.textContent || "";
+      ghost.appendChild(clone);
+    });
+
+    document.body.appendChild(ghost);
+    ghostRef.current = ghost;
+  }, []);
+
+  const handleDragPointerDown = useCallback((e: React.PointerEvent, index: number) => {
+    if (!playlist) return;
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    const row = (e.target as HTMLElement).closest("tr");
+    if (row) createGhost(row, e.clientY);
+
+    const state = { fromIndex: index, overIndex: index };
+    dragRef.current = state;
+    setDragState(state);
+  }, [playlist, createGhost]);
+
+  const handleDragPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    if (ghostRef.current) {
+      const ghost = ghostRef.current;
+      const h = ghost.offsetHeight;
+      ghostRef.current.style.top = e.clientY - h / 2 + "px";
+    }
+    const over = getOverIndex(e.clientY);
+    if (over !== dragRef.current.overIndex) {
+      dragRef.current = { ...dragRef.current, overIndex: over };
+      setDragState({ ...dragRef.current });
+    }
+  }, [getOverIndex]);
+
+  const handleDragPointerUp = useCallback((e: React.PointerEvent) => {
+    if (ghostRef.current) {
+      ghostRef.current.remove();
+      ghostRef.current = null;
+    }
+    const state = dragRef.current;
+    if (!state || !playlist) {
+      dragRef.current = null;
+      setDragState(null);
+      return;
+    }
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    if (state.fromIndex !== state.overIndex) {
+      onReorderTrack(playlist.id, state.fromIndex, state.overIndex);
+    }
+    dragRef.current = null;
+    setDragState(null);
+  }, [playlist, onReorderTrack]);
+
   const [contextMenu, setContextMenu] = useState<{
     track: Track;
     x: number;
@@ -114,7 +225,12 @@ export default function TrackList({
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
   const lastResetKey = useRef(libraryResetKey);
 
-  // Close video context menu on outside click
+  useEffect(() => {
+    setReorderMode(false);
+    setSortKey(playlist ? null : "title");
+    setSortDir("asc");
+  }, [playlist?.id]);
+
   useEffect(() => {
     if (!videoContextMenu) return;
     const handler = (e: MouseEvent) => {
@@ -122,7 +238,6 @@ export default function TrackList({
       if (target.closest(".context-menu")) return;
       setVideoContextMenu(null);
     };
-    // Defer to next tick so the triggering right-click doesn't immediately close it
     const raf = requestAnimationFrame(() => {
       document.addEventListener("mousedown", handler);
     });
@@ -132,7 +247,6 @@ export default function TrackList({
     };
   }, [videoContextMenu]);
 
-  // Handle Library sidebar click
   useEffect(() => {
     if (libraryResetKey === lastResetKey.current) return;
     lastResetKey.current = libraryResetKey;
@@ -144,7 +258,6 @@ export default function TrackList({
         setViewMode("albums");
         setSelectedAlbum(null);
       } else {
-        // "keep" — stay on current tab but exit album detail
         setSelectedAlbum(null);
       }
     }
@@ -194,7 +307,14 @@ export default function TrackList({
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
+      if (sortDir === "asc") {
+        setSortDir("desc");
+      } else if (playlist) {
+        setSortKey(null);
+        setSortDir("asc");
+      } else {
+        setSortDir("asc");
+      }
     } else {
       setSortKey(key);
       setSortDir("asc");
@@ -288,6 +408,16 @@ export default function TrackList({
               {playlist.tracks.length} track
               {playlist.tracks.length !== 1 ? "s" : ""}
             </span>
+            <button
+              className={`tracklist-reorder-btn${reorderMode ? " active" : ""}`}
+              onClick={() => setReorderMode((r) => !r)}
+              title={reorderMode ? "Done reordering" : "Edit order"}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z" />
+              </svg>
+              {reorderMode ? "Done" : "Edit order"}
+            </button>
           </div>
           <div className="tracklist-search-wrapper">
             <div className="tracklist-search">
@@ -410,9 +540,10 @@ export default function TrackList({
           <table className="tracklist-table">
             <thead>
               <tr>
+                {reorderMode && <th className="col-drag-handle"></th>}
                 <th
-                  className={`col-title sortable ${sortKey === "title" ? "sorted" : ""}`}
-                  onClick={() => handleSort("title")}
+                  className={`col-title${!playlist ? ` sortable ${sortKey === "title" ? "sorted" : ""}` : ""}`}
+                  onClick={!playlist ? () => handleSort("title") : undefined}
                 >
                   Title{" "}
                   {sortKey === "title" && (
@@ -422,8 +553,8 @@ export default function TrackList({
                   )}
                 </th>
                 <th
-                  className={`col-artist sortable ${sortKey === "artist" ? "sorted" : ""}`}
-                  onClick={() => handleSort("artist")}
+                  className={`col-artist${!playlist ? ` sortable ${sortKey === "artist" ? "sorted" : ""}` : ""}`}
+                  onClick={!playlist ? () => handleSort("artist") : undefined}
                 >
                   Artist{" "}
                   {sortKey === "artist" && (
@@ -433,8 +564,8 @@ export default function TrackList({
                   )}
                 </th>
                 <th
-                  className={`col-album sortable ${sortKey === "album" ? "sorted" : ""}`}
-                  onClick={() => handleSort("album")}
+                  className={`col-album${!playlist ? ` sortable ${sortKey === "album" ? "sorted" : ""}` : ""}`}
+                  onClick={!playlist ? () => handleSort("album") : undefined}
                 >
                   Album{" "}
                   {sortKey === "album" && (
@@ -444,8 +575,8 @@ export default function TrackList({
                   )}
                 </th>
                 <th
-                  className={`col-duration sortable ${sortKey === "duration" ? "sorted" : ""}`}
-                  onClick={() => handleSort("duration")}
+                  className={`col-duration${!playlist ? ` sortable ${sortKey === "duration" ? "sorted" : ""}` : ""}`}
+                  onClick={!playlist ? () => handleSort("duration") : undefined}
                 >
                   Duration{" "}
                   {sortKey === "duration" && (
@@ -457,11 +588,18 @@ export default function TrackList({
                 <th className="col-actions"></th>
               </tr>
             </thead>
-            <tbody>
-              {displayTracks.map((track, index) => (
+            <tbody ref={tbodyRef}>
+              {displayTracks.map((track, index) => {
+                const isDragSource = dragState?.fromIndex === index;
+
+                return (
                 <tr
                   key={track.path + index}
-                  className={`tracklist-row ${currentTrack?.path === track.path ? "playing" : ""}`}
+                  className={[
+                    "tracklist-row",
+                    currentTrack?.path === track.path ? "playing" : "",
+                    isDragSource ? "drag-source" : "",
+                  ].filter(Boolean).join(" ")}
                   onDoubleClick={() =>
                     onPlay(
                       track,
@@ -471,6 +609,18 @@ export default function TrackList({
                   }
                   onContextMenu={(e) => handleContextMenu(track, e)}
                 >
+                  {reorderMode && playlist && (
+                    <td
+                      className="col-drag-handle"
+                      onPointerDown={(e) => handleDragPointerDown(e, index)}
+                      onPointerMove={handleDragPointerMove}
+                      onPointerUp={handleDragPointerUp}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                      </svg>
+                    </td>
+                  )}
                   <td className="col-title">
                     <div className="track-title-cell">
                       <div className="track-cover-small">
@@ -539,10 +689,12 @@ export default function TrackList({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         ))}
+      {dragState && dragState.fromIndex !== dragState.overIndex && <DropIndicator tbodyRef={tbodyRef} dragState={dragState} />}
 
       {viewMode === "albums" &&
         !activeAlbum &&
@@ -741,9 +893,10 @@ export default function TrackList({
                 </div>
                 <div className="album-card-info">
                   <span className="album-card-name">{video.title}</span>
-                  {video.linked_track_path && (
-                    <span className="album-card-artist video-linked-badge">Linked</span>
-                  )}
+                  <span className="album-card-artist">
+                    {video.path.split(".").pop()?.toUpperCase()}
+                    {video.linked_track_path && <span className="video-linked-badge"> — Linked</span>}
+                  </span>
                 </div>
               </div>
             ))}
@@ -761,6 +914,14 @@ export default function TrackList({
               zIndex: 1000,
             }}
           >
+            <div className="context-menu-video-details">
+              <span className="context-menu-video-filename">
+                {videoContextMenu.video.path.split(/[/\\]/).pop()}
+              </span>
+              <span className="context-menu-video-path">
+                {videoContextMenu.video.path.split(/[/\\]/).slice(0, -1).join("/")}
+              </span>
+            </div>
             <button
               className="context-menu-item"
               onClick={() => {

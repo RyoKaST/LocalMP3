@@ -55,6 +55,7 @@ function App() {
   const [activeVideoLinked, setActiveVideoLinked] = useState(false);
   const [currentTrackVideoPath, setCurrentTrackVideoPath] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoActiveRef = useRef(false);
 
   useEffect(() => {
     audioRef.current = new Audio();
@@ -74,7 +75,6 @@ function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--accent", accentColor);
-    // Generate a slightly lighter hover variant
     root.style.setProperty("--accent-hover", accentColor);
     localStorage.setItem("accentColor", accentColor);
   }, [accentColor]);
@@ -242,6 +242,7 @@ function App() {
   }
 
   const handleTrackEnd = useCallback(() => {
+    if (videoActiveRef.current) return;
     if (repeat === "one") {
       const audio = audioRef.current;
       if (audio) {
@@ -270,7 +271,6 @@ function App() {
       setPlaylists(updatedPlaylists);
       if (currentView === id) setCurrentView("library");
 
-      // Handle currently playing track if it was playing from this playlist
       if (currentTrack && playSource === deletedPlaylist?.name) {
         if (playlistDeleteBehavior === "stop") {
           audioRef.current?.pause();
@@ -294,7 +294,6 @@ function App() {
             setPlaySource("Library");
           }
         } else {
-          // "library"
           setQueue(tracks);
           const idx = tracks.findIndex((t) => t.path === currentTrack.path);
           setQueueIndex(idx >= 0 ? idx : 0);
@@ -360,6 +359,27 @@ function App() {
     }
   }
 
+  async function handleReorderPlaylistTrack(
+    playlistId: string,
+    fromIndex: number,
+    toIndex: number,
+  ) {
+    try {
+      const updated = await invoke<Playlist>("reorder_playlist_track", {
+        id: playlistId,
+        fromIndex,
+        toIndex,
+      });
+      if (updated) {
+        setPlaylists((prev) =>
+          prev.map((p) => (p.id === playlistId ? updated : p)),
+        );
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   async function handlePickCover(playlistId: string) {
     const file = await open({
       filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
@@ -385,18 +405,15 @@ function App() {
         album,
         coverPath,
       });
-      // Update track in library
       setTracks((prev) =>
         prev.map((t) => (t.path === trackPath ? updated : t)),
       );
-      // Update track in playlists
       setPlaylists((prev) =>
         prev.map((p) => ({
           ...p,
           tracks: p.tracks.map((t) => (t.path === trackPath ? updated : t)),
         })),
       );
-      // Update current track if it's the one being edited
       if (currentTrack?.path === trackPath) {
         setCurrentTrack(updated);
       }
@@ -470,12 +487,10 @@ function App() {
     }
   }
 
-  // Video linking handlers
   async function handleLinkVideo(trackPath: string, videoPath: string) {
     try {
       await invoke("link_video", { trackPath, videoPath });
       await scanAllVideos(libraryPaths);
-      // Update currentTrackVideoPath if this is the current track
       if (currentTrack?.path === trackPath) {
         setCurrentTrackVideoPath(videoPath);
       }
@@ -505,7 +520,6 @@ function App() {
     }
   }
 
-  // Track video path for currently playing track
   useEffect(() => {
     if (!currentTrack) {
       setCurrentTrackVideoPath(null);
@@ -546,7 +560,7 @@ function App() {
             onThemeChange={setTheme}
             onAddFolder={addFolder}
             onRemoveFolder={removeFolder}
-            onRefreshLibrary={() => scanAllPaths(libraryPaths)}
+            onRefreshLibrary={() => { scanAllPaths(libraryPaths); scanAllVideos(libraryPaths); }}
             onDeleteTrack={handleDeleteTrack}
             playlistDeleteBehavior={playlistDeleteBehavior}
             onPlaylistDeleteBehaviorChange={(b) => {
@@ -600,9 +614,11 @@ function App() {
             onPlayVideo={(path) => {
               setActiveVideo(path);
               setActiveVideoLinked(false);
+              videoActiveRef.current = false;
             }}
             onLinkVideoToTrack={handleLinkVideo}
             onUnlinkVideo={handleUnlinkVideo}
+            onReorderTrack={handleReorderPlaylistTrack}
           />
         )}
       </main>
@@ -663,6 +679,7 @@ function App() {
         onPlayVideo={(path) => {
           setActiveVideo(path);
           setActiveVideoLinked(true);
+          videoActiveRef.current = true;
         }}
       />
       {fullscreenVisible && currentTrack && (
@@ -684,15 +701,35 @@ function App() {
         <VideoPlayer
           videoPath={activeVideo}
           onClose={() => {
+            videoActiveRef.current = false;
             setActiveVideo(null);
-            // Sync App's isPlaying state with actual audio element state
-            if (audioRef.current) {
-              setIsPlaying(!audioRef.current.paused);
+            const audio = audioRef.current;
+            if (audio) {
+              if (audio.ended) {
+                playNext();
+              } else {
+                setIsPlaying(!audio.paused);
+              }
             }
           }}
           audioRef={activeVideoLinked ? audioRef : undefined}
           isAudioPlaying={activeVideoLinked ? isPlaying : undefined}
           onAudioPlayPause={activeVideoLinked ? togglePlayPause : undefined}
+          onVideoEnd={() => {
+            videoActiveRef.current = false;
+            setActiveVideo(null);
+            playNext();
+          }}
+          onNext={() => {
+            videoActiveRef.current = false;
+            setActiveVideo(null);
+            playNext();
+          }}
+          onPrev={() => {
+            videoActiveRef.current = false;
+            setActiveVideo(null);
+            playPrev();
+          }}
         />
       )}
     </div>

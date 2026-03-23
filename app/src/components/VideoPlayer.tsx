@@ -5,11 +5,12 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 interface VideoPlayerProps {
   videoPath: string;
   onClose: () => void;
-  /** When provided, the video has a linked audio track. Used to toggle audio source. */
   audioRef?: React.RefObject<HTMLAudioElement | null>;
-  /** Whether the linked audio track is currently playing */
   isAudioPlaying?: boolean;
   onAudioPlayPause?: () => void;
+  onVideoEnd?: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 function formatTime(secs: number): string {
@@ -25,6 +26,9 @@ export default function VideoPlayer({
   audioRef,
   isAudioPlaying,
   onAudioPlayPause,
+  onVideoEnd,
+  onNext,
+  onPrev,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -34,18 +38,15 @@ export default function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const isSeeking = useRef(false);
 
-  // Audio source: "track" uses the linked audio file, "video" uses video's own audio
   const hasLinkedAudio = !!audioRef;
   const [audioSource, setAudioSource] = useState<"track" | "video">(
     hasLinkedAudio ? "track" : "video"
   );
 
-  // Manual audio offset: positive = audio starts later in the video, negative = earlier
   const [audioOffset, setAudioOffset] = useState(0);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
   const offsetLoaded = useRef(false);
 
-  // Load saved offset on mount
   useEffect(() => {
     invoke<number>("get_video_offset", { videoPath })
       .then((saved) => {
@@ -55,63 +56,75 @@ export default function VideoPlayer({
       .catch(() => { offsetLoaded.current = true; });
   }, [videoPath]);
 
-  // Save offset when it changes (skip initial load)
   useEffect(() => {
     if (!offsetLoaded.current) return;
     invoke("set_video_offset", { videoPath, offset: audioOffset }).catch(console.error);
   }, [audioOffset, videoPath]);
 
-  // Animation state
   const [isEntering, setIsEntering] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
 
-  // Auto-hide controls
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Enter animation
   useEffect(() => {
     const raf = requestAnimationFrame(() => setIsEntering(false));
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Setup on mount: sync video to audio position and match play/pause state
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [resolvedPath, setResolvedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    setConverting(false);
+    setResolvedPath(null);
+
+    invoke<string | null>("get_converted_video", { videoPath }).then((converted) => {
+      if (cancelled) return;
+      setResolvedPath(converted ?? videoPath);
+    }).catch(() => {
+      if (!cancelled) setResolvedPath(videoPath);
+    });
+
+    return () => { cancelled = true; };
+  }, [videoPath]);
+
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
-    video.src = convertFileSrc(videoPath);
+    if (!video || !resolvedPath) return;
+    video.src = convertFileSrc(resolvedPath);
     video.muted = audioSource === "track";
 
     if (audioRef?.current) {
-      // Sync video to current audio position (with offset)
-      const audioTime = audioRef.current.currentTime;
+      const audio = audioRef.current;
+      const audioTime = audio.currentTime;
       video.currentTime = Math.max(0, audioTime + audioOffset);
 
-      if (isAudioPlaying) {
-        // Audio is playing — start video too
+      const audioEnded = audio.duration && audioTime >= audio.duration - 0.1;
+
+      if (isAudioPlaying && !audioEnded) {
         video.play().then(() => setIsPlaying(true)).catch(console.error);
+      } else if (audioEnded) {
+        video.play().then(() => setIsPlaying(true)).catch(console.error);
+        if (!audio.paused) audio.pause();
       } else {
-        // Audio is paused — show the right frame but stay paused
         setIsPlaying(false);
-        // Load enough to show the frame
         video.preload = "auto";
       }
     } else {
-      // No linked audio — just play the video
       video.play().then(() => setIsPlaying(true)).catch(console.error);
     }
-  }, [videoPath]);
+  }, [resolvedPath]);
 
-  // Sync video muted state with audioSource
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     video.muted = audioSource === "track";
   }, [audioSource]);
 
-  // Periodic drift correction: keep audio in sync with video (respecting offset)
-  // When video is before the offset point, audio should be silent (paused at 0)
-  // Only corrects while video is actively playing
   useEffect(() => {
     if (!audioRef?.current || audioSource !== "track") return;
     const interval = setInterval(() => {
@@ -121,11 +134,11 @@ export default function VideoPlayer({
       const expectedAudioTime = video.currentTime - audioOffset;
 
       if (expectedAudioTime < 0) {
-        // Video hasn't reached the song start yet — silence
         if (!audio.paused) audio.pause();
         audio.currentTime = 0;
+      } else if (audio.duration && expectedAudioTime >= audio.duration) {
+        if (!audio.paused) audio.pause();
       } else {
-        // Video is past the offset — audio should be playing
         if (audio.paused) {
           audio.currentTime = expectedAudioTime;
           audio.play().catch(console.error);
@@ -139,7 +152,6 @@ export default function VideoPlayer({
     return () => clearInterval(interval);
   }, [audioRef, audioSource, audioOffset]);
 
-  // Video event listeners
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -151,20 +163,48 @@ export default function VideoPlayer({
       }
     };
     const onDurationChange = () => setDuration(video.duration);
-    const onEnded = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      if (onVideoEnd) onVideoEnd();
+    };
+    const onError = () => {
+      const err = video.error;
+      const ext = videoPath.split(".").pop()?.toLowerCase() ?? "";
+      if (err && (err.code === 3 || err.code === 4) && ext !== "mp4" && ext !== "mov" && !converting) {
+        setConverting(true);
+        setLoadError(`Converting ${ext.toUpperCase()} to MP4...`);
+        invoke<string>("convert_video", { videoPath })
+          .then((converted) => {
+            setLoadError(null);
+            setConverting(false);
+            setResolvedPath(converted);
+          })
+          .catch((e) => {
+            setConverting(false);
+            setLoadError(`Conversion failed: ${e}`);
+          });
+      } else if (err && !converting) {
+        const msgs: Record<number, string> = {
+          1: "Loading aborted",
+          2: "Network error",
+        };
+        setLoadError(msgs[err.code] ?? `Playback error (code ${err.code})`);
+      }
+    };
 
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("durationchange", onDurationChange);
     video.addEventListener("ended", onEnded);
+    video.addEventListener("error", onError);
 
     return () => {
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("durationchange", onDurationChange);
       video.removeEventListener("ended", onEnded);
+      video.removeEventListener("error", onError);
     };
-  }, []);
+  }, [videoPath]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleClose();
@@ -178,7 +218,6 @@ export default function VideoPlayer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Auto-hide controls
   const showControls = useCallback(() => {
     setControlsVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -198,10 +237,9 @@ export default function VideoPlayer({
     if (!video) return;
     if (video.paused) {
       video.play().then(() => setIsPlaying(true)).catch(console.error);
-      // Resume linked audio if past the offset
       if (audio) {
         const expectedAudioTime = video.currentTime - audioOffset;
-        if (expectedAudioTime >= 0) {
+        if (expectedAudioTime >= 0 && (!audio.duration || expectedAudioTime < audio.duration)) {
           audio.currentTime = expectedAudioTime;
           audio.play().catch(console.error);
         }
@@ -209,7 +247,6 @@ export default function VideoPlayer({
     } else {
       video.pause();
       setIsPlaying(false);
-      // Pause linked audio directly
       if (audio && !audio.paused) {
         audio.pause();
       }
@@ -227,10 +264,8 @@ export default function VideoPlayer({
 
     if (audio) {
       if (next === "video") {
-        // Switching to video audio — mute the track audio element directly (no pause/play toggle)
         audio.muted = true;
       } else {
-        // Switching to track audio — unmute and sync position
         const expectedAudioTime = (video?.currentTime ?? 0) - audioOffset;
         if (expectedAudioTime >= 0) {
           audio.currentTime = expectedAudioTime;
@@ -262,13 +297,13 @@ export default function VideoPlayer({
 
   const handleSeekEnd = useCallback(() => {
     if (videoRef.current) videoRef.current.currentTime = seekValue;
-    // Sync linked audio to the same position (with offset)
     if (audioRef?.current) {
       const expectedAudioTime = seekValue - audioOffset;
       if (expectedAudioTime < 0) {
-        // Seeking into silence zone — pause audio at 0
         audioRef.current.currentTime = 0;
         if (isAudioPlaying) onAudioPlayPause?.();
+      } else if (audioRef.current.duration && expectedAudioTime >= audioRef.current.duration) {
+        audioRef.current.pause();
       } else {
         audioRef.current.currentTime = expectedAudioTime;
       }
@@ -280,7 +315,6 @@ export default function VideoPlayer({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const v = parseFloat(e.target.value);
       setVolume(v);
-      // Control volume on whichever element is providing audio
       if (audioSource === "track" && audioRef?.current) {
         audioRef.current.volume = v;
       }
@@ -302,7 +336,6 @@ export default function VideoPlayer({
         videoRef.current.pause();
         videoRef.current.src = "";
       }
-      // Restore audio element state — unmute in case we muted it during video audio mode
       if (audioRef?.current) {
         audioRef.current.muted = false;
       }
@@ -332,6 +365,11 @@ export default function VideoPlayer({
         className="video-player-video"
         onClick={togglePlayPause}
       />
+      {loadError && (
+        <div className="video-player-error">
+          {loadError}
+        </div>
+      )}
       <button
         className={`video-player-close${controlsVisible ? "" : " hidden"}`}
         onClick={handleClose}
@@ -416,6 +454,13 @@ export default function VideoPlayer({
           <span className="fs-time">{formatTime(duration)}</span>
         </div>
         <div className="fs-buttons">
+          {onPrev && (
+            <button className="fs-btn" onClick={onPrev}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+              </svg>
+            </button>
+          )}
           <button className="fs-btn fs-btn-play" onClick={togglePlayPause}>
             {isPlaying ? (
               <svg
@@ -437,6 +482,13 @@ export default function VideoPlayer({
               </svg>
             )}
           </button>
+          {onNext && (
+            <button className="fs-btn" onClick={onNext}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+              </svg>
+            </button>
+          )}
           {hasLinkedAudio && audioOffset !== 0 && (
             <div className="video-offset-indicator">
               {audioOffset > 0

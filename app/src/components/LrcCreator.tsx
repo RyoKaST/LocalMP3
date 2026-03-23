@@ -27,13 +27,11 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
   const [lrcText, setLrcText] = useState("");
   const [lrcSaved, setLrcSaved] = useState(false);
 
-  // Finder state
   const [searchQuery, setSearchQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [finderResults, setFinderResults] = useState<Map<string, FinderTrack>>(new Map());
   const [isSearching, setIsSearching] = useState(false);
 
-  // Filter tracks without LRC already linked
   const availableTracks = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return tracks.filter((t) => {
@@ -70,14 +68,12 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
 
     const selectedTracks = tracks.filter((t) => selected.has(t.path));
 
-    // Initialize all as searching
     const initial = new Map<string, FinderTrack>();
     for (const t of selectedTracks) {
       initial.set(t.path, { track: t, status: "searching", lyrics: null });
     }
     setFinderResults(new Map(initial));
 
-    // Search sequentially to avoid hammering the API
     for (const t of selectedTracks) {
       try {
         const result = await invoke<string | null>("search_lrc_online", {
@@ -113,7 +109,6 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
 
   async function handleSaveResult(ft: FinderTrack) {
     if (!ft.lyrics) return;
-    // Save next to the audio file with same name
     const audioPath = ft.track.path;
     const lrcPath = audioPath.replace(/\.[^.]+$/, ".lrc");
     try {
@@ -138,7 +133,6 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
     }
   }
 
-  // Manual save
   async function handleSaveLrc() {
     if (!lrcText.trim()) return;
     const path = await save({
