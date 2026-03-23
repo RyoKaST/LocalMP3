@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+            ffmpeg_url: 'https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip'
+            ffmpeg_name: 'ffmpeg-aarch64-apple-darwin'
+            ffmpeg_extract: 'unzip -o ffmpeg.zip && mv ffmpeg ffmpeg-aarch64-apple-darwin'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+            ffmpeg_url: 'https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip'
+            ffmpeg_name: 'ffmpeg-x86_64-apple-darwin'
+            ffmpeg_extract: 'unzip -o ffmpeg.zip && mv ffmpeg ffmpeg-x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+            ffmpeg_url: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz'
+            ffmpeg_name: 'ffmpeg-x86_64-unknown-linux-gnu'
+            ffmpeg_extract: 'tar xf ffmpeg.tar.xz && mv ffmpeg-*-amd64-static/ffmpeg ffmpeg-x86_64-unknown-linux-gnu'
+          - platform: windows-latest
+            args: ''
+            ffmpeg_url: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+            ffmpeg_name: 'ffmpeg-x86_64-pc-windows-msvc.exe'
+            ffmpeg_extract: 'unzip -o ffmpeg.zip && mv ffmpeg-*-essentials_build/bin/ffmpeg.exe ffmpeg-x86_64-pc-windows-msvc.exe'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm install
+
+      - name: Download FFmpeg
+        working-directory: app/src-tauri
+        shell: bash
+        run: |
+          curl -L -o ffmpeg.zip "${{ matrix.ffmpeg_url }}" || curl -L -o ffmpeg.tar.xz "${{ matrix.ffmpeg_url }}"
+          ${{ matrix.ffmpeg_extract }}
+          chmod +x ${{ matrix.ffmpeg_name }} || true
+          rm -rf ffmpeg.zip ffmpeg.tar.xz ffmpeg-*-static ffmpeg-*-essentials_build 2>/dev/null || true
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: 'LocalMP3 ${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download the installer for your platform.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
