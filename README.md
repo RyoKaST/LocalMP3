@@ -134,7 +134,7 @@ Click the **lyrics button** in the player bar (or three-dot menu → **Link LRC 
 When lyrics are linked and the panel is open:
 - The **current line is highlighted** and auto-scrolls
 - **Click any line** to seek to that timestamp
-- Adjust **playback speed** (0.5x–2.0x) with the speed slider — useful if lyrics drift out of sync
+- Adjust **playback speed** (0.5x–2.0x) with the speed slider — useful if you have slowed down or sped up songs like I do.
 - Speed is saved per track
 
 #### Close on Click Outside
