@@ -15,24 +15,16 @@ jobs:
         include:
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
-            ffmpeg_url: 'https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip'
             ffmpeg_name: 'ffmpeg-aarch64-apple-darwin'
-            ffmpeg_extract: 'unzip -o ffmpeg.zip && mv ffmpeg ffmpeg-aarch64-apple-darwin'
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
-            ffmpeg_url: 'https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip'
             ffmpeg_name: 'ffmpeg-x86_64-apple-darwin'
-            ffmpeg_extract: 'unzip -o ffmpeg.zip && mv ffmpeg ffmpeg-x86_64-apple-darwin'
           - platform: ubuntu-22.04
             args: ''
-            ffmpeg_url: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz'
             ffmpeg_name: 'ffmpeg-x86_64-unknown-linux-gnu'
-            ffmpeg_extract: 'tar xf ffmpeg.tar.xz && mv ffmpeg-*-amd64-static/ffmpeg ffmpeg-x86_64-unknown-linux-gnu'
           - platform: windows-latest
             args: ''
-            ffmpeg_url: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
             ffmpeg_name: 'ffmpeg-x86_64-pc-windows-msvc.exe'
-            ffmpeg_extract: 'unzip -o ffmpeg.zip && mv ffmpeg-*-essentials_build/bin/ffmpeg.exe ffmpeg-x86_64-pc-windows-msvc.exe'
 
     runs-on: ${{ matrix.platform }}
 
@@ -64,14 +56,40 @@ jobs:
         working-directory: app
         run: npm install
 
-      - name: Download FFmpeg
+      - name: Download FFmpeg (macOS)
+        if: matrix.platform == 'macos-latest'
+        working-directory: app/src-tauri
+        run: |
+          curl -L -o ffmpeg.zip "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
+          unzip -o ffmpeg.zip
+          mv ffmpeg ${{ matrix.ffmpeg_name }}
+          chmod +x ${{ matrix.ffmpeg_name }}
+          rm -f ffmpeg.zip
+
+      - name: Download FFmpeg (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: app/src-tauri
+        run: |
+          curl -L -o ffmpeg.tar.xz "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+          tar xf ffmpeg.tar.xz
+          mv ffmpeg-*-amd64-static/ffmpeg ffmpeg-x86_64-unknown-linux-gnu
+          chmod +x ffmpeg-x86_64-unknown-linux-gnu
+          rm -rf ffmpeg.tar.xz ffmpeg-*-amd64-static
+
+      - name: Download FFmpeg (Windows)
+        if: matrix.platform == 'windows-latest'
         working-directory: app/src-tauri
         shell: bash
         run: |
-          curl -L -o ffmpeg.zip "${{ matrix.ffmpeg_url }}" || curl -L -o ffmpeg.tar.xz "${{ matrix.ffmpeg_url }}"
-          ${{ matrix.ffmpeg_extract }}
-          chmod +x ${{ matrix.ffmpeg_name }} || true
-          rm -rf ffmpeg.zip ffmpeg.tar.xz ffmpeg-*-static ffmpeg-*-essentials_build 2>/dev/null || true
+          curl -L -o ffmpeg.zip "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          unzip -o ffmpeg.zip
+          mv ffmpeg-*-essentials_build/bin/ffmpeg.exe ffmpeg-x86_64-pc-windows-msvc.exe
+          rm -rf ffmpeg.zip ffmpeg-*-essentials_build
+
+      - name: Verify FFmpeg exists
+        working-directory: app/src-tauri
+        shell: bash
+        run: ls -la ${{ matrix.ffmpeg_name }}
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
