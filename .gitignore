@@ -5,6 +5,9 @@ node_modules/
 dist/
 src-tauri/target/
 
+# FFmpeg sidecar binaries (downloaded at build time)
+app/src-tauri/ffmpeg-*
+
 # Env files
 .env
 .env.local

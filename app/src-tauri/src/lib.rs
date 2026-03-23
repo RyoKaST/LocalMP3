@@ -667,6 +667,18 @@ fn get_converted_video(app: tauri::AppHandle, video_path: String) -> Option<Stri
     }
 }
 
+async fn run_ffmpeg(app: &tauri::AppHandle, args: &[&str]) -> Result<(bool, Vec<u8>, Vec<u8>), String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app.shell()
+        .sidecar("ffmpeg")
+        .map_err(|e| e.to_string())?
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| format!("ffmpeg failed: {}", e))?;
+    Ok((output.status.success(), output.stdout, output.stderr))
+}
+
 #[tauri::command]
 async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<String, String> {
     let ext = Path::new(&video_path)
@@ -688,22 +700,18 @@ async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<Stri
     }
 
     let tmp_path = converted_path.with_extension("tmp.mp4");
+    let tmp_str = tmp_path.to_string_lossy().to_string();
 
-    let output = std::process::Command::new("ffmpeg")
-        .args([
-            "-i", &video_path,
-            "-c:v", "copy",
-            "-c:a", "copy",
-            "-movflags", "+faststart",
-            "-y",
-            &tmp_path.to_string_lossy(),
-        ])
-        .output();
+    let result = run_ffmpeg(&app, &[
+        "-i", &video_path,
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        "-y",
+        &tmp_str,
+    ]).await;
 
-    let success = match &output {
-        Ok(o) => o.status.success(),
-        Err(_) => false,
-    };
+    let success = matches!(&result, Ok((true, _, _)));
 
     if success && tmp_path.exists() {
         fs::rename(&tmp_path, &converted_path)
@@ -712,25 +720,21 @@ async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<Stri
     }
 
     let _ = fs::remove_file(&tmp_path);
-    let output = std::process::Command::new("ffmpeg")
-        .args([
-            "-i", &video_path,
-            "-c:v", "libx264",
-            "-crf", "0",       // lossless
-            "-preset", "fast",
-            "-c:a", "aac",
-            "-b:a", "320k",
-            "-movflags", "+faststart",
-            "-y",
-            &tmp_path.to_string_lossy(),
-        ])
-        .output()
-        .map_err(|e| format!("ffmpeg not found or failed to run: {}. Install with: brew install ffmpeg", e))?;
+    let (ok, _, stderr) = run_ffmpeg(&app, &[
+        "-i", &video_path,
+        "-c:v", "libx264",
+        "-crf", "0",
+        "-preset", "fast",
+        "-c:a", "aac",
+        "-b:a", "320k",
+        "-movflags", "+faststart",
+        "-y",
+        &tmp_str,
+    ]).await?;
 
-    if !output.status.success() {
+    if !ok {
         let _ = fs::remove_file(&tmp_path);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("ffmpeg conversion failed: {}", stderr));
+        return Err(format!("ffmpeg conversion failed: {}", String::from_utf8_lossy(&stderr)));
     }
 
     fs::rename(&tmp_path, &converted_path)
@@ -755,6 +759,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             scan_library,
             get_library_paths,
