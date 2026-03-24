@@ -101,7 +101,19 @@ jobs:
           projectPath: app
           tagName: ${{ github.ref_name }}
           releaseName: 'LocalMP3 ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download the installer for your platform.'
+          releaseBody: |
+            ## Download
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | **macOS (Apple Silicon)** | `LocalMP3_*_aarch64.dmg` | M1/M2/M3/M4 Macs |
+            | **macOS (Intel)** | `LocalMP3_*_x64.dmg` | Older Intel Macs |
+            | **Windows** | `LocalMP3_*_x64-setup.exe` | Recommended installer |
+            | **Linux (Debian/Ubuntu)** | `LocalMP3_*_amd64.deb` | `sudo dpkg -i` |
+            | **Linux (Fedora/RHEL)** | `LocalMP3_*_x86_64.rpm` | `sudo rpm -i` |
+            | **Linux (Other)** | `LocalMP3_*_amd64.AppImage` | Universal, no install needed |
+
+            > The `.sig` files are update signatures used by the auto-updater — you can ignore them.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true

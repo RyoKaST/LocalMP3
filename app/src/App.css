@@ -2135,6 +2135,57 @@ td.col-actions {
   margin-bottom: 32px;
 }
 
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  margin-bottom: 16px;
+  transition: border-color 0.15s;
+}
+
+.settings-search:focus-within {
+  border-color: var(--accent);
+}
+
+.settings-search-icon {
+  color: var(--text-subdued);
+  flex-shrink: 0;
+}
+
+.settings-search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.settings-search-input::placeholder {
+  color: var(--text-subdued);
+}
+
+.settings-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-subdued);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.settings-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
 .settings-tabs {
   display: flex;
   gap: 4px;
@@ -3209,39 +3260,60 @@ td.col-actions {
 
 /* --- Settings Select --- */
 
-.settings-select-group {
+.settings-segment-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 8px;
 }
 
-.settings-select-label {
+.settings-segment-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--hover-bg);
+  gap: 12px;
 }
 
-.settings-select-text {
+.settings-segment-label {
   color: var(--text-primary);
-  font-size: 14px;
-}
-
-.settings-select {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 6px 12px;
   font-size: 13px;
-  cursor: pointer;
-  outline: none;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
-.settings-select:focus {
-  border-color: var(--accent);
+.settings-segment-buttons {
+  display: flex;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.settings-segment-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-subdued);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-right: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.settings-segment-btn:last-child {
+  border-right: none;
+}
+
+.settings-segment-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.settings-segment-btn.active {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* --- Settings Update --- */

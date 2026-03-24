@@ -358,7 +358,13 @@ export default function Settings({
   onFullscreenControlsChange,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("directories");
+  const [searchQuery, setSearchQuery] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+
+  const isSearching = searchQuery.trim().length > 0;
+  const q = searchQuery.toLowerCase();
+  const matchesSearch = (...keywords: string[]) =>
+    keywords.some((k) => k.toLowerCase().includes(q));
 
   const dupeGroups = useMemo<DupeGroup[]>(() => {
     const map = new Map<string, (Track & { directory: string })[]>();
@@ -430,6 +436,27 @@ export default function Settings({
         <h1 className="settings-title">Settings</h1>
       </div>
 
+      <div className="settings-search">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" className="settings-search-icon">
+          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+        </svg>
+        <input
+          className="settings-search-input"
+          type="text"
+          placeholder="Search settings..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {isSearching && (
+          <button className="settings-search-clear" onClick={() => setSearchQuery("")}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {!isSearching && (
       <div className="settings-tabs">
         <button
           className={`settings-tab ${activeTab === "directories" ? "active" : ""}`}
@@ -465,10 +492,12 @@ export default function Settings({
           Updates
         </button>
       </div>
+      )}
 
       <div className="settings-content">
-        {activeTab === "appearances" && (
+        {(activeTab === "appearances" || isSearching) && (
           <div className="settings-section">
+            {(!isSearching || matchesSearch("theme", "dark", "light", "appearance")) && (
             <div className="settings-group">
               <h3 className="settings-group-title">Theme</h3>
               <div className="settings-theme-toggle">
@@ -492,7 +521,9 @@ export default function Settings({
                 </button>
               </div>
             </div>
+            )}
 
+            {(!isSearching || matchesSearch("accent", "color", "appearance")) && (
             <div className="settings-group">
               <h3 className="settings-group-title">Accent Color</h3>
               <div className="settings-colors">
@@ -511,10 +542,11 @@ export default function Settings({
               </div>
               <ColorPicker color={accentColor} onChange={onAccentChange} />
             </div>
+            )}
           </div>
         )}
 
-        {activeTab === "directories" && (
+        {(activeTab === "directories" || isSearching) && (!isSearching || matchesSearch("directories", "folder", "music", "library", "path", "scan")) && (
           <div className="settings-section">
             <div className="settings-group">
               <h3 className="settings-group-title">Music Directories</h3>
@@ -565,8 +597,9 @@ export default function Settings({
           </div>
         )}
 
-        {activeTab === "experience" && (
+        {(activeTab === "experience" || isSearching) && (
           <div className="settings-section">
+            {(!isSearching || matchesSearch("playlist", "deletion", "delete")) && (
             <div className="settings-group">
               <h3 className="settings-group-title">Playlist Deletion</h3>
               <p className="settings-description">
@@ -605,7 +638,9 @@ export default function Settings({
                 </label>
               </div>
             </div>
+            )}
 
+            {(!isSearching || matchesSearch("lyrics", "panel", "close", "click outside")) && (
             <div className="settings-group">
               <h3 className="settings-group-title">Lyrics Panel</h3>
               <label className="settings-toggle" onClick={() => onLyricsCloseOnClickOutsideChange(!lyricsCloseOnClickOutside)}>
@@ -618,7 +653,9 @@ export default function Settings({
                 </div>
               </label>
             </div>
+            )}
 
+            {(!isSearching || matchesSearch("library", "navigation", "sidebar", "songs", "albums")) && (
             <div className="settings-group">
               <h3 className="settings-group-title">Library Navigation</h3>
               <p className="settings-description">
@@ -657,58 +694,67 @@ export default function Settings({
                 </label>
               </div>
             </div>
+            )}
 
+            {(!isSearching || matchesSearch("fullscreen", "player", "layout", "background", "controls", "karaoke", "cover")) && (
             <div className="settings-group">
               <h3 className="settings-group-title">Fullscreen Player</h3>
               <p className="settings-description">
                 Customize the fullscreen player appearance. Click the cover art in the player to enter fullscreen.
               </p>
 
-              <div className="settings-select-group">
-                <label className="settings-select-label">
-                  <span className="settings-select-text">Layout</span>
-                  <select
-                    className="settings-select"
-                    value={fullscreenLayout}
-                    onChange={(e) => onFullscreenLayoutChange(e.target.value as FullscreenLayout)}
-                  >
-                    <option value="side-by-side">Side by Side</option>
-                    <option value="cover">Cover</option>
-                    <option value="karaoke">Karaoke</option>
-                  </select>
-                </label>
+              <div className="settings-segment-group">
+                <div className="settings-segment-row">
+                  <span className="settings-segment-label">Layout</span>
+                  <div className="settings-segment-buttons">
+                    {([["side-by-side", "Side by Side"], ["cover", "Cover"], ["karaoke", "Karaoke"]] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={`settings-segment-btn${fullscreenLayout === value ? " active" : ""}`}
+                        onClick={() => onFullscreenLayoutChange(value as FullscreenLayout)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                <label className="settings-select-label">
-                  <span className="settings-select-text">Background</span>
-                  <select
-                    className="settings-select"
-                    value={fullscreenBackground}
-                    onChange={(e) => onFullscreenBackgroundChange(e.target.value as FullscreenBackground)}
-                  >
-                    <option value="blurred-cover">Blurred Cover</option>
-                    <option value="color-gradient">Color Gradient</option>
-                    <option value="dark-accent">Dark Glow</option>
-                  </select>
-                </label>
+                <div className="settings-segment-row">
+                  <span className="settings-segment-label">Background</span>
+                  <div className="settings-segment-buttons">
+                    {([["blurred-cover", "Blurred Cover"], ["color-gradient", "Color Gradient"], ["dark-accent", "Dark Glow"]] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={`settings-segment-btn${fullscreenBackground === value ? " active" : ""}`}
+                        onClick={() => onFullscreenBackgroundChange(value as FullscreenBackground)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                <label className="settings-select-label">
-                  <span className="settings-select-text">Controls</span>
-                  <select
-                    className="settings-select"
-                    value={fullscreenControls}
-                    onChange={(e) => onFullscreenControlsChange(e.target.value as FullscreenControls)}
-                  >
-                    <option value="full">Full</option>
-                    <option value="minimal">Minimal</option>
-                    <option value="auto-hide">Auto-hide</option>
-                  </select>
-                </label>
+                <div className="settings-segment-row">
+                  <span className="settings-segment-label">Controls</span>
+                  <div className="settings-segment-buttons">
+                    {([["full", "Full"], ["minimal", "Minimal"], ["auto-hide", "Auto-hide"]] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={`settings-segment-btn${fullscreenControls === value ? " active" : ""}`}
+                        onClick={() => onFullscreenControlsChange(value as FullscreenControls)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
+            )}
           </div>
         )}
 
-        {activeTab === "duplicates" && (
+        {(activeTab === "duplicates" || isSearching) && (!isSearching || matchesSearch("duplicate", "copies", "same track")) && (
           <div className="settings-section">
             <div className="settings-group">
               <h3 className="settings-group-title">Duplicate Tracks</h3>
@@ -840,7 +886,7 @@ export default function Settings({
           </div>
         )}
 
-        {activeTab === "updates" && (
+        {(activeTab === "updates" || isSearching) && (!isSearching || matchesSearch("update", "version", "install", "download")) && (
           <div className="settings-section">
             <div className="settings-group">
               <h3 className="settings-group-title">App Updates</h3>
