@@ -353,6 +353,8 @@ function VersionSwitcher() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const [status, setStatus] = useState("");
 
   async function fetchReleases() {
     setLoading(true);
@@ -375,15 +377,27 @@ function VersionSwitcher() {
     fetchReleases();
   }, []);
 
-  async function goToRelease() {
-    const release = releases.find((r) => r.tag_name === selected);
-    if (!release) return;
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(release.html_url);
+  async function installRelease() {
+    if (!selected || installing) return;
+    setInstalling(true);
+    setError("");
+    setStatus("Downloading and installing...");
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const msg = await invoke<string>("install_version", { tag: selected });
+      setStatus(msg);
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      setTimeout(() => relaunch(), 1500);
+    } catch (e) {
+      setError(String(e));
+      setStatus("");
+    } finally {
+      setInstalling(false);
+    }
   }
 
   if (loading) return <span className="settings-update-status">Loading versions...</span>;
-  if (error) return <span className="settings-update-status settings-update-error">{error}</span>;
+  if (error && releases.length === 0) return <span className="settings-update-status settings-update-error">{error}</span>;
   if (releases.length === 0) return null;
 
   return (
@@ -392,6 +406,7 @@ function VersionSwitcher() {
         className="settings-select"
         value={selected}
         onChange={(e) => setSelected(e.target.value)}
+        disabled={installing}
       >
         {releases.map((r) => (
           <option key={r.tag_name} value={r.tag_name}>
@@ -399,9 +414,11 @@ function VersionSwitcher() {
           </option>
         ))}
       </select>
-      <button className="settings-update-btn" onClick={goToRelease}>
-        Download
+      <button className="settings-update-btn" onClick={installRelease} disabled={installing}>
+        {installing ? "Installing..." : "Install"}
       </button>
+      {status && <span className="settings-update-status">{status}</span>}
+      {error && <span className="settings-update-status settings-update-error">{error}</span>}
     </div>
   );
 }

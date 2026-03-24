@@ -764,6 +764,164 @@ async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<Stri
     Ok(converted_path.to_string_lossy().to_string())
 }
 
+#[derive(Deserialize)]
+struct GithubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Deserialize)]
+struct GithubReleaseApi {
+    assets: Vec<GithubAsset>,
+}
+
+#[tauri::command]
+async fn install_version(app: tauri::AppHandle, tag: String) -> Result<String, String> {
+    let url = format!(
+        "https://api.github.com/repos/RyoKaST/LocalMP3/releases/tags/{}",
+        tag
+    );
+
+    let client = reqwest::Client::new();
+    let release: GithubReleaseApi = client
+        .get(&url)
+        .header("User-Agent", "LocalMP3")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch release: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse release: {}", e))?;
+
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+
+    let suffix = match (os, arch) {
+        ("macos", "aarch64") => "_aarch64.dmg",
+        ("macos", "x86_64") => "_x64.dmg",
+        ("windows", _) => "_x64-setup.exe",
+        ("linux", _) => "_amd64.AppImage",
+        _ => return Err(format!("Unsupported platform: {} {}", os, arch)),
+    };
+
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| a.name.ends_with(suffix))
+        .ok_or_else(|| format!("No asset found for {}", suffix))?;
+
+    let tmp_dir = app.path().app_data_dir().unwrap().join("version_switch");
+    let _ = fs::create_dir_all(&tmp_dir);
+    let download_path = tmp_dir.join(&asset.name);
+
+    let response = client
+        .get(&asset.browser_download_url)
+        .header("User-Agent", "LocalMP3")
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?;
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read download: {}", e))?;
+
+    fs::write(&download_path, &bytes)
+        .map_err(|e| format!("Failed to save file: {}", e))?;
+
+    if os == "macos" {
+        install_macos_dmg(&download_path).await?;
+    } else {
+        // On Windows/Linux, open the folder containing the installer
+        if let Some(parent) = download_path.parent() {
+            let _ = std::process::Command::new(if os == "windows" { "explorer" } else { "xdg-open" })
+                .arg(parent)
+                .spawn();
+        }
+        return Ok("Installer downloaded. Please run it to complete the installation.".into());
+    }
+
+    // Clean up
+    let _ = fs::remove_dir_all(&tmp_dir);
+
+    Ok("Installation complete. Relaunching...".into())
+}
+
+async fn install_macos_dmg(dmg_path: &Path) -> Result<(), String> {
+    use std::process::Command;
+
+    // Mount the DMG
+    let mount_output = Command::new("hdiutil")
+        .args(["attach", "-nobrowse", "-quiet"])
+        .arg(dmg_path)
+        .output()
+        .map_err(|e| format!("Failed to mount DMG: {}", e))?;
+
+    if !mount_output.status.success() {
+        return Err(format!(
+            "hdiutil attach failed: {}",
+            String::from_utf8_lossy(&mount_output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&mount_output.stdout);
+    let mount_point = stdout
+        .lines()
+        .last()
+        .and_then(|l| l.split('\t').last())
+        .map(|s| s.trim().to_string())
+        .ok_or("Could not find mount point")?;
+
+    // Find the .app in the mounted DMG
+    let app_name = fs::read_dir(&mount_point)
+        .map_err(|e| format!("Failed to read mount: {}", e))?
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().map_or(false, |ext| ext == "app"))
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .ok_or("No .app found in DMG")?;
+
+    let src = Path::new(&mount_point).join(&app_name);
+    let dest = Path::new("/Applications").join(&app_name);
+
+    // Remove old app if exists
+    if dest.exists() {
+        let _ = fs::remove_dir_all(&dest);
+    }
+
+    // Copy new app
+    let cp = Command::new("cp")
+        .args(["-R"])
+        .arg(&src)
+        .arg(&dest)
+        .output()
+        .map_err(|e| format!("Failed to copy app: {}", e))?;
+
+    if !cp.status.success() {
+        let _ = Command::new("hdiutil")
+            .args(["detach", "-quiet"])
+            .arg(&mount_point)
+            .output();
+        return Err(format!(
+            "cp failed: {}",
+            String::from_utf8_lossy(&cp.stderr)
+        ));
+    }
+
+    // Strip quarantine
+    let _ = Command::new("xattr")
+        .args(["-cr"])
+        .arg(&dest)
+        .output();
+
+    // Unmount DMG
+    let _ = Command::new("hdiutil")
+        .args(["detach", "-quiet"])
+        .arg(&mount_point)
+        .output();
+
+    Ok(())
+}
+
 fn get_converted_path(app: &tauri::AppHandle, video_path: &str) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     video_path.hash(&mut hasher);
@@ -815,6 +973,7 @@ pub fn run() {
             get_video_offset,
             get_converted_video,
             convert_video,
+            install_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
