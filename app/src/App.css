@@ -2964,11 +2964,12 @@ td.col-actions {
   justify-content: center;
   opacity: 1;
   transform: scale(1);
-  transition: opacity 0.15s ease-out;
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
 }
 
 .fs-overlay.fs-entering {
   opacity: 0;
+  transform: scale(0.97);
 }
 
 .fs-overlay.fs-closing {
@@ -3461,6 +3462,29 @@ td.col-actions {
 
 .settings-update-btn:hover {
   opacity: 0.85;
+}
+
+.settings-version-switcher {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.settings-select {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.settings-select:focus {
+  border-color: var(--accent);
 }
 
 .settings-update-status {

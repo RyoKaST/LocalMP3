@@ -340,6 +340,72 @@ function UpdateChecker({ updateAvailable }: { updateAvailable?: boolean }) {
   );
 }
 
+interface GithubRelease {
+  tag_name: string;
+  name: string;
+  html_url: string;
+  prerelease: boolean;
+  draft: boolean;
+}
+
+function VersionSwitcher() {
+  const [releases, setReleases] = useState<GithubRelease[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState("");
+  const [error, setError] = useState("");
+
+  async function fetchReleases() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("https://api.github.com/repos/RyoKaST/LocalMP3/releases");
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+      const data: GithubRelease[] = await res.json();
+      const published = data.filter((r) => !r.draft);
+      setReleases(published);
+      if (published.length > 0) setSelected(published[0].tag_name);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchReleases();
+  }, []);
+
+  async function goToRelease() {
+    const release = releases.find((r) => r.tag_name === selected);
+    if (!release) return;
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(release.html_url);
+  }
+
+  if (loading) return <span className="settings-update-status">Loading versions...</span>;
+  if (error) return <span className="settings-update-status settings-update-error">{error}</span>;
+  if (releases.length === 0) return null;
+
+  return (
+    <div className="settings-version-switcher">
+      <select
+        className="settings-select"
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+      >
+        {releases.map((r) => (
+          <option key={r.tag_name} value={r.tag_name}>
+            {r.name || r.tag_name}{r.prerelease ? " (pre-release)" : ""}
+          </option>
+        ))}
+      </select>
+      <button className="settings-update-btn" onClick={goToRelease}>
+        Download
+      </button>
+    </div>
+  );
+}
+
 export default function Settings({
   accentColor,
   theme,
@@ -904,6 +970,13 @@ export default function Settings({
               </p>
               <AppVersion />
               <UpdateChecker updateAvailable={updateAvailable} />
+            </div>
+            <div className="settings-group">
+              <h3 className="settings-group-title">Switch Version</h3>
+              <p className="settings-description">
+                Download a different version of LocalMP3.
+              </p>
+              <VersionSwitcher />
             </div>
           </div>
         )}

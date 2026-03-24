@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import Sidebar from "./components/Sidebar";
@@ -9,7 +9,7 @@ import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior, type 
 import LrcCreator from "./components/LrcCreator";
 import Lyrics from "./components/Lyrics";
 import FullscreenPlayer from "./components/FullscreenPlayer";
-import VideoPlayer from "./components/VideoPlayer";
+const VideoPlayer = lazy(() => import("./components/VideoPlayer"));
 import { Track, Playlist, VideoFile } from "./types";
 import "./App.css";
 
@@ -768,7 +768,7 @@ function App() {
         />
       )}
       {activeVideo && (
-        <VideoPlayer
+        <Suspense fallback={null}><VideoPlayer
           videoPath={activeVideo}
           onClose={() => {
             videoActiveRef.current = false;
@@ -800,7 +800,7 @@ function App() {
             setActiveVideo(null);
             playPrev();
           }}
-        />
+        /></Suspense>
       )}
     </div>
   );

@@ -61,7 +61,7 @@ export default function VideoPlayer({
     invoke("set_video_offset", { videoPath, offset: audioOffset }).catch(console.error);
   }, [audioOffset, videoPath]);
 
-  // Keep window on top while video plays so macOS never occludes/suspends it
+  // Keep window on top while video plays so macOS never suspends the video
   useEffect(() => {
     let cleanup = () => {};
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
@@ -136,12 +136,45 @@ export default function VideoPlayer({
     video.muted = audioSource === "track";
   }, [audioSource]);
 
+  // Sync audio↔video. Detects when macOS suspends the video (focus loss)
+  // and avoids pulling audio back to the stale video position.
   useEffect(() => {
     if (!audioRef?.current || audioSource !== "track") return;
+    let lastVideoTime = -1;
+    let staleCount = 0;
+    let wasStale = false;
+
     const interval = setInterval(() => {
       const video = videoRef.current;
       const audio = audioRef.current;
-      if (!video || !audio || isSeeking.current || video.paused) return;
+      if (!video || !audio || isSeeking.current) return;
+
+      // Detect if video is stale (suspended by macOS)
+      if (video.currentTime === lastVideoTime && !video.paused) {
+        staleCount++;
+      } else {
+        // Video is advancing again
+        if (wasStale && staleCount > 2) {
+          // Video just resumed from being suspended — sync video to audio (not audio to video)
+          const targetVideoTime = audio.currentTime + audioOffset;
+          if (targetVideoTime >= 0) {
+            video.currentTime = targetVideoTime;
+          }
+          video.play().catch(console.error);
+        }
+        staleCount = 0;
+        wasStale = false;
+      }
+      lastVideoTime = video.currentTime;
+
+      if (staleCount > 2) {
+        // Video is stale — do NOT touch audio, let it keep playing
+        wasStale = true;
+        return;
+      }
+
+      if (video.paused) return;
+
       const expectedAudioTime = video.currentTime - audioOffset;
 
       if (expectedAudioTime < 0) {
@@ -215,35 +248,6 @@ export default function VideoPlayer({
       video.removeEventListener("error", onError);
     };
   }, [videoPath]);
-
-  const isMac = /Mac/.test(navigator.userAgent);
-  const hiddenAtRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!isMac) return;
-    const onVisibilityChange = () => {
-      if (document.hidden) {
-        hiddenAtRef.current = Date.now();
-      } else if (hiddenAtRef.current && isPlaying) {
-        const elapsed = (Date.now() - hiddenAtRef.current) / 1000;
-        hiddenAtRef.current = null;
-        const video = videoRef.current;
-        const audio = audioRef?.current;
-        if (video) {
-          video.currentTime += elapsed;
-          video.play().catch(console.error);
-        }
-        if (audio && audioSource === "track") {
-          audio.currentTime += elapsed;
-          audio.play().catch(console.error);
-        }
-      } else {
-        hiddenAtRef.current = null;
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [isMac, audioRef, audioSource, isPlaying]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
