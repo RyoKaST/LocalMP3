@@ -61,6 +61,17 @@ export default function VideoPlayer({
     invoke("set_video_offset", { videoPath, offset: audioOffset }).catch(console.error);
   }, [audioOffset, videoPath]);
 
+  // Keep window on top while video plays so macOS never occludes/suspends it
+  useEffect(() => {
+    let cleanup = () => {};
+    import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+      const win = getCurrentWindow();
+      win.setAlwaysOnTop(true).catch(() => {});
+      cleanup = () => win.setAlwaysOnTop(false).catch(() => {});
+    });
+    return () => cleanup();
+  }, []);
+
   const [isEntering, setIsEntering] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
 

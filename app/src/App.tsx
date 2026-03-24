@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import Sidebar from "./components/Sidebar";
 import TrackList from "./components/TrackList";
@@ -27,6 +26,8 @@ function App() {
   const [repeat, setRepeat] = useState<"off" | "all" | "one">("off");
   const [lyricsVisible, setLyricsVisible] = useState(false);
   const [playSource, setPlaySource] = useState<string | null>(null);
+  const [userQueue, setUserQueue] = useState<Track[]>([]);
+  const [playingFromUserQueue, setPlayingFromUserQueue] = useState(false);
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("accentColor") || "#1db954");
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("theme") as "dark" | "light") || "dark");
   const [libraryPaths, setLibraryPaths] = useState<string[]>([]);
@@ -56,6 +57,21 @@ function App() {
   const [currentTrackVideoPath, setCurrentTrackVideoPath] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoActiveRef = useRef(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkUpdate() {
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const update = await check();
+        if (!cancelled && update) setUpdateAvailable(true);
+      } catch { /* ignore */ }
+    }
+    checkUpdate();
+    const interval = setInterval(checkUpdate, 30 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   useEffect(() => {
     audioRef.current = new Audio();
@@ -158,11 +174,16 @@ function App() {
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (source !== playSource) {
+      setUserQueue([]);
+    }
+
     const idx = trackQueue.findIndex((t) => t.path === track.path);
     setQueue(trackQueue);
     setQueueIndex(idx >= 0 ? idx : 0);
     setCurrentTrack(track);
     setPlaySource(source);
+    setPlayingFromUserQueue(false);
 
     audio.src = convertFileSrc(track.path);
     audio.play().then(() => setIsPlaying(true)).catch(console.error);
@@ -191,9 +212,22 @@ function App() {
   }
 
   function playNext() {
-    if (queue.length === 0) return;
     const audio = audioRef.current;
     if (!audio) return;
+
+    if (userQueue.length > 0) {
+      const next = userQueue[0];
+      setUserQueue((prev) => prev.slice(1));
+      setCurrentTrack(next);
+      setPlayingFromUserQueue(true);
+      audio.src = convertFileSrc(next.path);
+      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      return;
+    }
+
+    setPlayingFromUserQueue(false);
+
+    if (queue.length === 0) return;
 
     if (shuffle) {
       const remaining = queue.filter((_, i) => i !== queueIndex);
@@ -241,6 +275,31 @@ function App() {
     }
   }
 
+  function addToQueue(track: Track) {
+    setUserQueue((prev) => [...prev, track]);
+  }
+
+  function playNextTrack(track: Track) {
+    setUserQueue((prev) => [track, ...prev]);
+  }
+
+  function removeFromQueue(index: number) {
+    setUserQueue((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function reorderQueue(fromIndex: number, toIndex: number) {
+    setUserQueue((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function clearQueue() {
+    setUserQueue([]);
+  }
+
   const handleTrackEnd = useCallback(() => {
     if (videoActiveRef.current) return;
     if (repeat === "one") {
@@ -252,7 +311,7 @@ function App() {
     } else {
       playNext();
     }
-  }, [queueIndex, queue, repeat, shuffle]);
+  }, [queueIndex, queue, repeat, shuffle, userQueue]);
 
   async function handleCreatePlaylist(name: string) {
     try {
@@ -546,6 +605,7 @@ function App() {
         }}
         onCreatePlaylist={handleCreatePlaylist}
         onDeletePlaylist={handleDeletePlaylist}
+        updateAvailable={updateAvailable}
       />
       <main className="main-content">
         {currentView === "lrc-creator" ? (
@@ -592,6 +652,7 @@ function App() {
               setFullscreenControls(c);
               localStorage.setItem("fullscreenControls", c);
             }}
+            updateAvailable={updateAvailable}
           />
         ) : (
           <TrackList
@@ -619,6 +680,8 @@ function App() {
             onLinkVideoToTrack={handleLinkVideo}
             onUnlinkVideo={handleUnlinkVideo}
             onReorderTrack={handleReorderPlaylistTrack}
+            onPlayNext={playNextTrack}
+            onAddToQueue={addToQueue}
           />
         )}
       </main>
@@ -681,6 +744,13 @@ function App() {
           setActiveVideoLinked(true);
           videoActiveRef.current = true;
         }}
+        userQueue={userQueue}
+        playingFromUserQueue={playingFromUserQueue}
+        onPlayNext={playNextTrack}
+        onAddToQueue={addToQueue}
+        onRemoveFromQueue={removeFromQueue}
+        onReorderQueue={reorderQueue}
+        onClearQueue={clearQueue}
       />
       {fullscreenVisible && currentTrack && (
         <FullscreenPlayer

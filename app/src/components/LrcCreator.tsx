@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Track } from "../types";
@@ -31,11 +31,34 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [finderResults, setFinderResults] = useState<Map<string, FinderTrack>>(new Map());
   const [isSearching, setIsSearching] = useState(false);
+  const [noLyricsPaths, setNoLyricsPaths] = useState<Set<string>>(new Set());
+  const [showNoLyrics, setShowNoLyrics] = useState(false);
+
+  useEffect(() => {
+    invoke<string[]>("get_no_lyrics").then((paths) => setNoLyricsPaths(new Set(paths)));
+  }, []);
+
+  async function toggleNoLyrics(trackPath: string) {
+    const isMarked = noLyricsPaths.has(trackPath);
+    await invoke("set_no_lyrics", { trackPath, value: !isMarked });
+    setNoLyricsPaths((prev) => {
+      const next = new Set(prev);
+      if (isMarked) next.delete(trackPath);
+      else next.add(trackPath);
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(trackPath);
+      return next;
+    });
+  }
 
   const availableTracks = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return tracks.filter((t) => {
       if (t.lrc_path) return false;
+      if (noLyricsPaths.has(t.path)) return false;
       if (!q) return true;
       return (
         t.title.toLowerCase().includes(q) ||
@@ -43,7 +66,11 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
         t.album.toLowerCase().includes(q)
       );
     });
-  }, [tracks, searchQuery]);
+  }, [tracks, searchQuery, noLyricsPaths]);
+
+  const noLyricsTracks = useMemo(() => {
+    return tracks.filter((t) => noLyricsPaths.has(t.path));
+  }, [tracks, noLyricsPaths]);
 
   function toggleSelect(path: string) {
     setSelected((prev) => {
@@ -271,46 +298,60 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
                         {track.artist} &middot; {formatDuration(track.duration)}
                       </span>
                     </div>
-                    {result && (
-                      <div className="lrc-finder-status">
-                        {result.status === "searching" && (
-                          <span className="lrc-status searching">
-                            <span className="lrc-spinner" />
-                          </span>
-                        )}
-                        {result.status === "found-synced" && (
-                          <span className="lrc-status found">Synced</span>
-                        )}
-                        {result.status === "found-plain" && (
-                          <span className="lrc-status found-plain">Unsynced</span>
-                        )}
-                        {result.status === "not-found" && (
-                          <span className="lrc-status not-found">Not found</span>
-                        )}
-                        {result.status === "saved" && (
-                          <span className="lrc-status saved">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                            </svg>
-                            Saved
-                          </span>
-                        )}
-                        {result.status === "error" && (
-                          <span className="lrc-status not-found">Error</span>
-                        )}
-                        {(result.status === "found-synced" || result.status === "found-plain") && (
-                          <button
-                            className="lrc-finder-save-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSaveResult(result);
-                            }}
-                          >
-                            Save
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div className="lrc-finder-actions">
+                      {result && (
+                        <div className="lrc-finder-status">
+                          {result.status === "searching" && (
+                            <span className="lrc-status searching">
+                              <span className="lrc-spinner" />
+                            </span>
+                          )}
+                          {result.status === "found-synced" && (
+                            <span className="lrc-status found">Synced</span>
+                          )}
+                          {result.status === "found-plain" && (
+                            <span className="lrc-status found-plain">Unsynced</span>
+                          )}
+                          {result.status === "not-found" && (
+                            <span className="lrc-status not-found">Not found</span>
+                          )}
+                          {result.status === "saved" && (
+                            <span className="lrc-status saved">
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                              </svg>
+                              Saved
+                            </span>
+                          )}
+                          {result.status === "error" && (
+                            <span className="lrc-status not-found">Error</span>
+                          )}
+                          {(result.status === "found-synced" || result.status === "found-plain") && (
+                            <button
+                              className="lrc-finder-save-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSaveResult(result);
+                              }}
+                            >
+                              Save
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        className="lrc-finder-no-lyrics-btn"
+                        title="Mark as no lyrics"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleNoLyrics(track.path);
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -325,6 +366,50 @@ export default function LrcCreator({ tracks, onLrcLinked }: LrcCreatorProps) {
                 </svg>
                 Save all found ({foundCount})
               </button>
+            </div>
+          )}
+
+          {noLyricsTracks.length > 0 && (
+            <div className="lrc-no-lyrics-section">
+              <button
+                className="lrc-no-lyrics-toggle"
+                onClick={() => setShowNoLyrics(!showNoLyrics)}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="currentColor"
+                  style={{ transform: showNoLyrics ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
+                >
+                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
+                No lyrics ({noLyricsTracks.length})
+              </button>
+              {showNoLyrics && (
+                <div className="lrc-no-lyrics-list">
+                  {noLyricsTracks.map((track) => (
+                    <div key={track.path} className="lrc-no-lyrics-item">
+                      <div className="lrc-finder-info">
+                        <span className="lrc-finder-title">{track.title}</span>
+                        <span className="lrc-finder-meta">
+                          {track.artist} &middot; {formatDuration(track.duration)}
+                        </span>
+                      </div>
+                      <button
+                        className="lrc-no-lyrics-restore-btn"
+                        title="Restore to finder list"
+                        onClick={() => toggleNoLyrics(track.path)}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                          <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" />
+                        </svg>
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -65,6 +65,7 @@ interface SettingsProps {
   onFullscreenLayoutChange: (layout: FullscreenLayout) => void;
   onFullscreenBackgroundChange: (bg: FullscreenBackground) => void;
   onFullscreenControlsChange: (controls: FullscreenControls) => void;
+  updateAvailable?: boolean;
 }
 
 const ACCENT_PRESETS = [
@@ -233,11 +234,17 @@ function AppVersion() {
   ) : null;
 }
 
-function UpdateChecker() {
-  const [status, setStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error">("idle");
+function UpdateChecker({ updateAvailable }: { updateAvailable?: boolean }) {
+  const [status, setStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error">(
+    updateAvailable ? "checking" : "idle"
+  );
   const [version, setVersion] = useState("");
   const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    if (updateAvailable) checkForUpdate();
+  }, []);
 
   async function checkForUpdate() {
     setStatus("checking");
@@ -356,6 +363,7 @@ export default function Settings({
   onFullscreenLayoutChange,
   onFullscreenBackgroundChange,
   onFullscreenControlsChange,
+  updateAvailable,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("directories");
   const [searchQuery, setSearchQuery] = useState("");
@@ -490,6 +498,7 @@ export default function Settings({
           onClick={() => setActiveTab("updates")}
         >
           Updates
+          {updateAvailable && <span className="settings-tab-dot" />}
         </button>
       </div>
       )}
@@ -894,7 +903,7 @@ export default function Settings({
                 Check for new versions of LocalMP3 and install them directly.
               </p>
               <AppVersion />
-              <UpdateChecker />
+              <UpdateChecker updateAvailable={updateAvailable} />
             </div>
           </div>
         )}

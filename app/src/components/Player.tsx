@@ -31,6 +31,13 @@ interface PlayerProps {
   playlist: Playlist | null;
   currentTrackVideoPath: string | null;
   onPlayVideo: (videoPath: string) => void;
+  userQueue: Track[];
+  playingFromUserQueue: boolean;
+  onPlayNext: (track: Track) => void;
+  onAddToQueue: (track: Track) => void;
+  onRemoveFromQueue: (index: number) => void;
+  onReorderQueue: (fromIndex: number, toIndex: number) => void;
+  onClearQueue: () => void;
 }
 
 function formatTime(secs: number): string {
@@ -68,10 +75,19 @@ export default function Player({
   playlist,
   currentTrackVideoPath,
   onPlayVideo,
+  userQueue,
+  playingFromUserQueue,
+  onPlayNext,
+  onAddToQueue,
+  onRemoveFromQueue,
+  onReorderQueue,
+  onClearQueue,
 }: PlayerProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [queuePanelOpen, setQueuePanelOpen] = useState(false);
+  const queuePanelRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(1);
   const [seekValue, setSeekValue] = useState(0);
   const isSeeking = useRef(false);
@@ -99,6 +115,17 @@ export default function Player({
       audio.removeEventListener("ended", onEnded);
     };
   }, [audioRef, onTrackEnd]);
+
+  useEffect(() => {
+    if (!queuePanelOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (queuePanelRef.current && !queuePanelRef.current.contains(e.target as Node)) {
+        setQueuePanelOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [queuePanelOpen]);
 
   const handleSeekStart = useCallback(() => {
     isSeeking.current = true;
@@ -157,7 +184,11 @@ export default function Player({
             <div className="player-track-text">
               <div className="player-track-name">{currentTrack.title}</div>
               <div className="player-track-artist">{currentTrack.artist}</div>
-              {playSource && <div className="player-source">{playSource}</div>}
+              <div className="player-source">
+                {playingFromUserQueue && <span className="player-from-queue">From queue</span>}
+                {playingFromUserQueue && playSource && <span> · </span>}
+                {playSource && <span>{playSource}</span>}
+              </div>
             </div>
           </>
         ) : (
@@ -216,7 +247,7 @@ export default function Player({
             className="player-btn"
             onClick={onNext}
             disabled={
-              queueIndex >= queue.length - 1 && repeat !== "all" && !shuffle
+              userQueue.length === 0 && queueIndex >= queue.length - 1 && repeat !== "all" && !shuffle
             }
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -275,6 +306,78 @@ export default function Player({
       </div>
 
       <div className="player-volume">
+        {currentTrack && (
+          <div className="player-queue-wrapper" ref={queuePanelRef}>
+            <button
+              className={`player-btn player-btn-mode${queuePanelOpen ? " active" : ""}`}
+              onClick={() => setQueuePanelOpen((v) => !v)}
+              title="Queue"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+              </svg>
+              {userQueue.length > 0 && (
+                <span className="player-queue-badge">{userQueue.length}</span>
+              )}
+            </button>
+            {queuePanelOpen && (
+              <div className="player-queue-panel">
+                <div className="player-queue-header">
+                  <span className="player-queue-title">Queue</span>
+                  {userQueue.length > 0 && (
+                    <button className="player-queue-clear" onClick={onClearQueue}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {userQueue.length === 0 ? (
+                  <div className="player-queue-empty">No tracks in queue</div>
+                ) : (
+                  <div className="player-queue-list">
+                    {userQueue.map((track, index) => (
+                      <div
+                        key={track.path + index}
+                        className="player-queue-item"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", String(index));
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.add("drag-over");
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove("drag-over");
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove("drag-over");
+                          const fromIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                          if (fromIndex !== index) {
+                            onReorderQueue(fromIndex, index);
+                          }
+                        }}
+                      >
+                        <div className="player-queue-item-info">
+                          <span className="player-queue-item-title">{track.title}</span>
+                          <span className="player-queue-item-artist">{track.artist}</span>
+                        </div>
+                        <button
+                          className="player-queue-item-remove"
+                          onClick={() => onRemoveFromQueue(index)}
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {currentTrack && currentTrackVideoPath && (
           <button
             className="player-btn player-btn-mode"
@@ -339,6 +442,8 @@ export default function Player({
           onEditTrack={onEditTrack}
           onLinkLrc={onLinkLrc}
           onLinkVideo={onLinkVideo}
+          onPlayNext={onPlayNext}
+          onAddToQueue={onAddToQueue}
         />
       )}
     </div>

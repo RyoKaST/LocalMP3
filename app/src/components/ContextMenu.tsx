@@ -12,6 +12,8 @@ interface ContextMenuProps {
   onEditTrack: (track: Track) => void;
   onLinkLrc: (track: Track) => void;
   onLinkVideo: (track: Track) => void;
+  onPlayNext: (track: Track) => void;
+  onAddToQueue: (track: Track) => void;
 }
 
 function PlaylistPicker({
@@ -104,6 +106,8 @@ export default function ContextMenu({
   onEditTrack,
   onLinkLrc,
   onLinkVideo,
+  onPlayNext,
+  onAddToQueue,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showPlaylists, setShowPlaylists] = useState(false);
@@ -159,6 +163,32 @@ export default function ContextMenu({
           </svg>
           Edit metadata
         </button>
+        <div className="context-menu-separator" />
+        <button
+          className="context-menu-item"
+          onClick={() => {
+            onPlayNext(track);
+            onClose();
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+          </svg>
+          Play next
+        </button>
+        <button
+          className="context-menu-item"
+          onClick={() => {
+            onAddToQueue(track);
+            onClose();
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+          </svg>
+          Add to queue
+        </button>
+        <div className="context-menu-separator" />
         <button
           className="context-menu-item"
           onClick={() => {

@@ -56,6 +56,9 @@ struct AppData {
     /// video_path -> offset in seconds
     #[serde(default)]
     video_offsets: std::collections::HashMap<String, f64>,
+    /// tracks marked as having no lyrics
+    #[serde(default)]
+    no_lyrics: Vec<String>,
 }
 
 impl Default for AppData {
@@ -68,6 +71,7 @@ impl Default for AppData {
             lrc_speeds: std::collections::HashMap::new(),
             video_links: std::collections::HashMap::new(),
             video_offsets: std::collections::HashMap::new(),
+            no_lyrics: vec![],
         }
     }
 }
@@ -551,6 +555,24 @@ fn get_lrc_speed(app: tauri::AppHandle, track_path: String) -> f64 {
 }
 
 #[tauri::command]
+fn get_no_lyrics(app: tauri::AppHandle) -> Vec<String> {
+    load_data(&app).no_lyrics
+}
+
+#[tauri::command]
+fn set_no_lyrics(app: tauri::AppHandle, track_path: String, value: bool) {
+    let mut data = load_data(&app);
+    if value {
+        if !data.no_lyrics.contains(&track_path) {
+            data.no_lyrics.push(track_path);
+        }
+    } else {
+        data.no_lyrics.retain(|p| p != &track_path);
+    }
+    save_data(&app, &data);
+}
+
+#[tauri::command]
 fn save_lrc_file(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| e.to_string())
 }
@@ -781,6 +803,8 @@ pub fn run() {
             unlink_lrc,
             save_lrc_file,
             search_lrc_online,
+            get_no_lyrics,
+            set_no_lyrics,
             set_lrc_speed,
             get_lrc_speed,
             scan_videos,

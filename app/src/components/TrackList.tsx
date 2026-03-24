@@ -26,6 +26,8 @@ interface TrackListProps {
   onLinkVideoToTrack: (trackPath: string, videoPath: string) => void;
   onUnlinkVideo: (trackPath: string) => void;
   onReorderTrack: (playlistId: string, fromIndex: number, toIndex: number) => void;
+  onPlayNext: (track: Track) => void;
+  onAddToQueue: (track: Track) => void;
 }
 
 function formatDuration(secs: number): string {
@@ -100,6 +102,8 @@ export default function TrackList({
   onLinkVideoToTrack,
   onUnlinkVideo,
   onReorderTrack,
+  onPlayNext,
+  onAddToQueue,
 }: TrackListProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(playlist ? null : "title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -673,6 +677,18 @@ export default function TrackList({
                   </td>
                   <td className="col-actions">
                     <button
+                      className="queue-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToQueue(track);
+                      }}
+                      title="Add to queue"
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+                      </svg>
+                    </button>
+                    <button
                       className="dots-btn"
                       onClick={(e) => handleDotsClick(track, e)}
                     >
@@ -833,6 +849,18 @@ export default function TrackList({
                     {formatDuration(track.duration)}
                   </td>
                   <td className="col-actions">
+                    <button
+                      className="queue-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToQueue(track);
+                      }}
+                      title="Add to queue"
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+                      </svg>
+                    </button>
                     <button
                       className="dots-btn"
                       onClick={(e) => handleDotsClick(track, e)}
@@ -1036,6 +1064,8 @@ export default function TrackList({
           onEditTrack={onEditTrack}
           onLinkLrc={onLinkLrc}
           onLinkVideo={onLinkVideo}
+          onPlayNext={onPlayNext}
+          onAddToQueue={onAddToQueue}
         />
       )}
     </div>
