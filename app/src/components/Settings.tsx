@@ -1,6 +1,7 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
 import { Track } from "../types";
 
 function hexToHsv(hex: string): [number, number, number] {
@@ -218,6 +219,18 @@ interface DupeGroup {
 interface ProbableDupeGroup {
   title: string;
   tracks: (Track & { directory: string })[];
+}
+
+function AppVersion() {
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion().then(setVersion);
+  }, []);
+  return version ? (
+    <p className="settings-description" style={{ opacity: 0.7 }}>
+      Current version: {version}
+    </p>
+  ) : null;
 }
 
 function UpdateChecker() {
@@ -834,6 +847,7 @@ export default function Settings({
               <p className="settings-description">
                 Check for new versions of LocalMP3 and install them directly.
               </p>
+              <AppVersion />
               <UpdateChecker />
             </div>
           </div>
