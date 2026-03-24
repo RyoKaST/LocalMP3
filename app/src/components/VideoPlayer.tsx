@@ -205,6 +205,35 @@ export default function VideoPlayer({
     };
   }, [videoPath]);
 
+  const isMac = /Mac/.test(navigator.userAgent);
+  const hiddenAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isMac) return;
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+      } else if (hiddenAtRef.current && isPlaying) {
+        const elapsed = (Date.now() - hiddenAtRef.current) / 1000;
+        hiddenAtRef.current = null;
+        const video = videoRef.current;
+        const audio = audioRef?.current;
+        if (video) {
+          video.currentTime += elapsed;
+          video.play().catch(console.error);
+        }
+        if (audio && audioSource === "track") {
+          audio.currentTime += elapsed;
+          audio.play().catch(console.error);
+        }
+      } else {
+        hiddenAtRef.current = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [isMac, audioRef, audioSource, isPlaying]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleClose();
