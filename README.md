@@ -37,6 +37,12 @@ Head to the [Releases](../../releases) page and download the installer for your 
 
 FFmpeg is bundled with the app — no extra setup needed.
 
+> **macOS users:** If macOS says the app is "damaged" or can't be opened, run this in Terminal:
+> ```bash
+> xattr -cr /Applications/LocalMP3.app
+> ```
+> This removes the quarantine flag that macOS adds to apps downloaded from the internet. The app is not signed with an Apple Developer certificate, which triggers this warning.
+
 ---
 
 ## Getting Started
