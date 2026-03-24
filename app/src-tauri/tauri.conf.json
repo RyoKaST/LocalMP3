@@ -40,5 +40,13 @@
     "externalBin": [
       "ffmpeg"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/RyoKaST/LocalMP3/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3Qzg1MTQ3REZBRUE0NjEKUldSaHBLN2ZSMUhJSi9nSHNmVW02ZDBPTzVFR0dYakMzc2lJb05DcTRzU1J6S1ZCbitlbFphbEMK"
+    }
   }
 }

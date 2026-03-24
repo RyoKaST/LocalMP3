@@ -12,6 +12,8 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [{ "name": "binaries/ffmpeg", "sidecar": true }]
-    }
+    },
+    "updater:default",
+    "process:allow-restart"
   ]
 }

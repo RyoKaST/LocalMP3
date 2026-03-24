@@ -3244,6 +3244,66 @@ td.col-actions {
   border-color: var(--accent);
 }
 
+/* --- Settings Update --- */
+
+.settings-update {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-update-available {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-update-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.settings-update-btn:hover {
+  opacity: 0.85;
+}
+
+.settings-update-status {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-update-error {
+  color: #e53e3e;
+}
+
+.settings-update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-update-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-highlight);
+  overflow: hidden;
+}
+
+.settings-update-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
 /* ===== Video Player ===== */
 .video-player-overlay {
   cursor: none;

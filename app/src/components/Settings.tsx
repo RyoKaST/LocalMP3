@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { Track } from "../types";
 
 function hexToHsv(hex: string): [number, number, number] {
@@ -75,7 +77,7 @@ const ACCENT_PRESETS = [
   { name: "Teal", value: "#38b2ac" },
 ];
 
-type Tab = "appearances" | "directories" | "experience" | "duplicates";
+type Tab = "appearances" | "directories" | "experience" | "duplicates" | "updates";
 
 function getParentDir(filePath: string, libraryPaths: string[]): string {
   for (const lp of libraryPaths) {
@@ -218,6 +220,106 @@ interface ProbableDupeGroup {
   tracks: (Track & { directory: string })[];
 }
 
+function UpdateChecker() {
+  const [status, setStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error">("idle");
+  const [version, setVersion] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function checkForUpdate() {
+    setStatus("checking");
+    setErrorMsg("");
+    try {
+      const update = await check();
+      if (update) {
+        setVersion(update.version);
+        setStatus("available");
+      } else {
+        setStatus("up-to-date");
+      }
+    } catch (e) {
+      setErrorMsg(String(e));
+      setStatus("error");
+    }
+  }
+
+  async function downloadAndInstall() {
+    setStatus("downloading");
+    try {
+      const update = await check();
+      if (!update) return;
+      let totalLen = 0;
+      let downloaded = 0;
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started" && event.data.contentLength) {
+          totalLen = event.data.contentLength;
+        } else if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          if (totalLen > 0) setProgress(Math.round((downloaded / totalLen) * 100));
+        } else if (event.event === "Finished") {
+          setStatus("ready");
+        }
+      });
+      setStatus("ready");
+    } catch (e) {
+      setErrorMsg(String(e));
+      setStatus("error");
+    }
+  }
+
+  async function restart() {
+    await relaunch();
+  }
+
+  return (
+    <div className="settings-update">
+      {status === "idle" && (
+        <button className="settings-update-btn" onClick={checkForUpdate}>
+          Check for updates
+        </button>
+      )}
+      {status === "checking" && (
+        <span className="settings-update-status">Checking for updates...</span>
+      )}
+      {status === "up-to-date" && (
+        <span className="settings-update-status">You're up to date!</span>
+      )}
+      {status === "available" && (
+        <div className="settings-update-available">
+          <span className="settings-update-status">Version {version} is available</span>
+          <button className="settings-update-btn" onClick={downloadAndInstall}>
+            Download & Install
+          </button>
+        </div>
+      )}
+      {status === "downloading" && (
+        <div className="settings-update-progress">
+          <span className="settings-update-status">Downloading... {progress}%</span>
+          <div className="settings-update-bar">
+            <div className="settings-update-bar-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
+      {status === "ready" && (
+        <div className="settings-update-available">
+          <span className="settings-update-status">Update installed!</span>
+          <button className="settings-update-btn" onClick={restart}>
+            Restart now
+          </button>
+        </div>
+      )}
+      {status === "error" && (
+        <div className="settings-update-available">
+          <span className="settings-update-status settings-update-error">{errorMsg}</span>
+          <button className="settings-update-btn" onClick={checkForUpdate}>
+            Retry
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings({
   accentColor,
   theme,
@@ -342,6 +444,12 @@ export default function Settings({
           {totalDupeCount > 0 && (
             <span className="settings-tab-badge">{totalDupeCount}</span>
           )}
+        </button>
+        <button
+          className={`settings-tab ${activeTab === "updates" ? "active" : ""}`}
+          onClick={() => setActiveTab("updates")}
+        >
+          Updates
         </button>
       </div>
 
@@ -715,6 +823,18 @@ export default function Settings({
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "updates" && (
+          <div className="settings-section">
+            <div className="settings-group">
+              <h3 className="settings-group-title">App Updates</h3>
+              <p className="settings-description">
+                Check for new versions of LocalMP3 and install them directly.
+              </p>
+              <UpdateChecker />
             </div>
           </div>
         )}
