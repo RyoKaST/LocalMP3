@@ -61,7 +61,6 @@ export default function VideoPlayer({
     invoke("set_video_offset", { videoPath, offset: audioOffset }).catch(console.error);
   }, [audioOffset, videoPath]);
 
-  // Keep window on top while video plays so macOS never suspends the video
   useEffect(() => {
     let cleanup = () => {};
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
@@ -109,18 +108,12 @@ export default function VideoPlayer({
     video.src = convertFileSrc(resolvedPath);
     video.muted = audioSource === "track";
 
-    if (audioRef?.current) {
+    if (audioRef?.current && audioSource === "track") {
       const audio = audioRef.current;
-      const audioTime = audio.currentTime;
-      video.currentTime = Math.max(0, audioTime + audioOffset);
+      video.currentTime = Math.max(0, audio.currentTime + audioOffset);
 
-      const audioEnded = audio.duration && audioTime >= audio.duration - 0.1;
-
-      if (isAudioPlaying && !audioEnded) {
+      if (!audio.paused) {
         video.play().then(() => setIsPlaying(true)).catch(console.error);
-      } else if (audioEnded) {
-        video.play().then(() => setIsPlaying(true)).catch(console.error);
-        if (!audio.paused) audio.pause();
       } else {
         setIsPlaying(false);
         video.preload = "auto";
@@ -136,63 +129,34 @@ export default function VideoPlayer({
     video.muted = audioSource === "track";
   }, [audioSource]);
 
-  // Sync audio↔video. Detects when macOS suspends the video (focus loss)
-  // and avoids pulling audio back to the stale video position.
   useEffect(() => {
     if (!audioRef?.current || audioSource !== "track") return;
-    let lastVideoTime = -1;
-    let staleCount = 0;
-    let wasStale = false;
 
     const interval = setInterval(() => {
       const video = videoRef.current;
       const audio = audioRef.current;
       if (!video || !audio || isSeeking.current) return;
 
-      // Detect if video is stale (suspended by macOS)
-      if (video.currentTime === lastVideoTime && !video.paused) {
-        staleCount++;
-      } else {
-        // Video is advancing again
-        if (wasStale && staleCount > 2) {
-          // Video just resumed from being suspended — sync video to audio (not audio to video)
-          const targetVideoTime = audio.currentTime + audioOffset;
-          if (targetVideoTime >= 0) {
-            video.currentTime = targetVideoTime;
-          }
-          video.play().catch(console.error);
-        }
-        staleCount = 0;
-        wasStale = false;
+      if (audio.paused && !video.paused) {
+        video.pause();
+        return;
       }
-      lastVideoTime = video.currentTime;
-
-      if (staleCount > 2) {
-        // Video is stale — do NOT touch audio, let it keep playing
-        wasStale = true;
+      if (!audio.paused && video.paused) {
+        video.currentTime = audio.currentTime + audioOffset;
+        video.play().catch(console.error);
         return;
       }
 
-      if (video.paused) return;
+      if (audio.paused || video.paused) return;
 
-      const expectedAudioTime = video.currentTime - audioOffset;
+      const expectedVideoTime = audio.currentTime + audioOffset;
+      const drift = Math.abs(expectedVideoTime - video.currentTime);
 
-      if (expectedAudioTime < 0) {
-        if (!audio.paused) audio.pause();
-        audio.currentTime = 0;
-      } else if (audio.duration && expectedAudioTime >= audio.duration) {
-        if (!audio.paused) audio.pause();
-      } else {
-        if (audio.paused) {
-          audio.currentTime = expectedAudioTime;
-          audio.play().catch(console.error);
-        }
-        const drift = Math.abs(expectedAudioTime - audio.currentTime);
-        if (drift > 0.3) {
-          audio.currentTime = expectedAudioTime;
-        }
+      if (drift > 0.5) {
+        video.currentTime = expectedVideoTime;
       }
-    }, 200);
+    }, 1000);
+
     return () => clearInterval(interval);
   }, [audioRef, audioSource, audioOffset]);
 
@@ -279,20 +243,21 @@ export default function VideoPlayer({
     const video = videoRef.current;
     const audio = audioRef?.current;
     if (!video) return;
-    if (video.paused) {
-      video.play().then(() => setIsPlaying(true)).catch(console.error);
-      if (audio) {
-        const expectedAudioTime = video.currentTime - audioOffset;
-        if (expectedAudioTime >= 0 && (!audio.duration || expectedAudioTime < audio.duration)) {
-          audio.currentTime = expectedAudioTime;
-          audio.play().catch(console.error);
-        }
+
+    if (hasLinkedAudio && audio && audioSource === "track") {
+      if (audio.paused) {
+        audio.play().catch(console.error);
+        setIsPlaying(true);
+      } else {
+        audio.pause();
+        setIsPlaying(false);
       }
     } else {
-      video.pause();
-      setIsPlaying(false);
-      if (audio && !audio.paused) {
-        audio.pause();
+      if (video.paused) {
+        video.play().then(() => setIsPlaying(true)).catch(console.error);
+      } else {
+        video.pause();
+        setIsPlaying(false);
       }
     }
   }
@@ -304,11 +269,13 @@ export default function VideoPlayer({
 
     if (video) {
       video.muted = next === "track";
+      video.playbackRate = 1.0;
     }
 
     if (audio) {
       if (next === "video") {
         audio.muted = true;
+        audio.playbackRate = 1.0;
       } else {
         const expectedAudioTime = (video?.currentTime ?? 0) - audioOffset;
         if (expectedAudioTime >= 0) {
@@ -340,8 +307,7 @@ export default function VideoPlayer({
   );
 
   const handleSeekEnd = useCallback(() => {
-    if (videoRef.current) videoRef.current.currentTime = seekValue;
-    if (audioRef?.current) {
+    if (audioRef?.current && audioSource === "track") {
       const expectedAudioTime = seekValue - audioOffset;
       if (expectedAudioTime < 0) {
         audioRef.current.currentTime = 0;
@@ -351,9 +317,12 @@ export default function VideoPlayer({
       } else {
         audioRef.current.currentTime = expectedAudioTime;
       }
+      if (videoRef.current) videoRef.current.currentTime = seekValue;
+    } else {
+      if (videoRef.current) videoRef.current.currentTime = seekValue;
     }
     isSeeking.current = false;
-  }, [seekValue, audioRef, audioOffset, isAudioPlaying, onAudioPlayPause]);
+  }, [seekValue, audioRef, audioSource, audioOffset, isAudioPlaying, onAudioPlayPause]);
 
   const handleVolumeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

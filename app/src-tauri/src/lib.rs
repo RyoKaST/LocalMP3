@@ -852,7 +852,7 @@ async fn install_macos_dmg(dmg_path: &Path) -> Result<(), String> {
 
     // Mount the DMG
     let mount_output = Command::new("hdiutil")
-        .args(["attach", "-nobrowse", "-quiet"])
+        .args(["attach", "-nobrowse"])
         .arg(dmg_path)
         .output()
         .map_err(|e| format!("Failed to mount DMG: {}", e))?;
@@ -867,10 +867,11 @@ async fn install_macos_dmg(dmg_path: &Path) -> Result<(), String> {
     let stdout = String::from_utf8_lossy(&mount_output.stdout);
     let mount_point = stdout
         .lines()
+        .filter_map(|line| {
+            line.find("/Volumes/").map(|i| line[i..].trim().to_string())
+        })
         .last()
-        .and_then(|l| l.split('\t').last())
-        .map(|s| s.trim().to_string())
-        .ok_or("Could not find mount point")?;
+        .ok_or_else(|| format!("Could not find mount point in: {}", stdout))?;
 
     // Find the .app in the mounted DMG
     let app_name = fs::read_dir(&mount_point)
