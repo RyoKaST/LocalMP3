@@ -30,4 +30,5 @@ reqwest = { version = "0.12", features = ["json"] }
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+objc = "0.2.7"
 
