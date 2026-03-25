@@ -41,6 +41,7 @@ export type LibraryClickBehavior = "songs" | "albums" | "keep";
 export type FullscreenLayout = "side-by-side" | "cover" | "karaoke";
 export type FullscreenBackground = "blurred-cover" | "color-gradient" | "dark-accent";
 export type FullscreenControls = "full" | "minimal" | "auto-hide";
+export type PrevButtonBehavior = "restart-first" | "always-prev";
 
 interface SettingsProps {
   accentColor: string;
@@ -65,6 +66,8 @@ interface SettingsProps {
   onFullscreenLayoutChange: (layout: FullscreenLayout) => void;
   onFullscreenBackgroundChange: (bg: FullscreenBackground) => void;
   onFullscreenControlsChange: (controls: FullscreenControls) => void;
+  prevButtonBehavior: PrevButtonBehavior;
+  onPrevButtonBehaviorChange: (behavior: PrevButtonBehavior) => void;
   updateAvailable?: boolean;
 }
 
@@ -446,6 +449,8 @@ export default function Settings({
   onFullscreenLayoutChange,
   onFullscreenBackgroundChange,
   onFullscreenControlsChange,
+  prevButtonBehavior,
+  onPrevButtonBehaviorChange,
   updateAvailable,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("directories");
@@ -782,6 +787,37 @@ export default function Settings({
                   <div className="settings-radio-text">
                     <span className="settings-radio-label">Always show Albums</span>
                     <span className="settings-radio-desc">Reset to the Albums tab every time</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+            )}
+
+            {(!isSearching || matchesSearch("previous", "button", "restart", "skip")) && (
+            <div className="settings-group">
+              <h3 className="settings-group-title">Previous Button</h3>
+              <p className="settings-description">
+                What happens when you press the previous button?
+              </p>
+              <div className="settings-radio-group">
+                <label
+                  className={`settings-radio${prevButtonBehavior === "restart-first" ? " active" : ""}`}
+                  onClick={() => onPrevButtonBehaviorChange("restart-first")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Restart, then previous</span>
+                    <span className="settings-radio-desc">Restarts the song first. Press again within the first 6 seconds to go to the previous track.</span>
+                  </div>
+                </label>
+                <label
+                  className={`settings-radio${prevButtonBehavior === "always-prev" ? " active" : ""}`}
+                  onClick={() => onPrevButtonBehaviorChange("always-prev")}
+                >
+                  <span className="settings-radio-dot" />
+                  <div className="settings-radio-text">
+                    <span className="settings-radio-label">Always previous</span>
+                    <span className="settings-radio-desc">Always skip to the previous track</span>
                   </div>
                 </label>
               </div>

@@ -5,7 +5,7 @@ import Sidebar from "./components/Sidebar";
 import TrackList from "./components/TrackList";
 import Player from "./components/Player";
 import EditTrackModal from "./components/EditTrackModal";
-import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior, type FullscreenLayout, type FullscreenBackground, type FullscreenControls } from "./components/Settings";
+import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior, type FullscreenLayout, type FullscreenBackground, type FullscreenControls, type PrevButtonBehavior } from "./components/Settings";
 import LrcCreator from "./components/LrcCreator";
 import Lyrics from "./components/Lyrics";
 import FullscreenPlayer from "./components/FullscreenPlayer";
@@ -50,6 +50,9 @@ function App() {
   );
   const [fullscreenControls, setFullscreenControls] = useState<FullscreenControls>(
     () => (localStorage.getItem("fullscreenControls") as FullscreenControls) || "auto-hide"
+  );
+  const [prevButtonBehavior, setPrevButtonBehavior] = useState<PrevButtonBehavior>(
+    () => (localStorage.getItem("prevButtonBehavior") as PrevButtonBehavior) || "restart-first"
   );
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
@@ -259,6 +262,12 @@ function App() {
     if (queue.length === 0) return;
     const audio = audioRef.current;
     if (!audio) return;
+
+    if (prevButtonBehavior === "restart-first" && audio.currentTime > 6) {
+      audio.currentTime = 0;
+      if (audio.paused) audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      return;
+    }
 
     if (queueIndex > 0) {
       const prev = queue[queueIndex - 1];
@@ -652,6 +661,11 @@ function App() {
               setFullscreenControls(c);
               localStorage.setItem("fullscreenControls", c);
             }}
+            prevButtonBehavior={prevButtonBehavior}
+            onPrevButtonBehaviorChange={(b) => {
+              setPrevButtonBehavior(b);
+              localStorage.setItem("prevButtonBehavior", b);
+            }}
             updateAvailable={updateAvailable}
           />
         ) : (
@@ -785,6 +799,8 @@ function App() {
           audioRef={activeVideoLinked ? audioRef : undefined}
           isAudioPlaying={activeVideoLinked ? isPlaying : undefined}
           onAudioPlayPause={activeVideoLinked ? togglePlayPause : undefined}
+          lrcPath={activeVideoLinked ? currentTrack?.lrc_path : undefined}
+          trackPath={activeVideoLinked ? currentTrack?.path : undefined}
           onVideoEnd={() => {
             videoActiveRef.current = false;
             setActiveVideo(null);

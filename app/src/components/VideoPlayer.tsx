@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useLyricsSync } from "../hooks/useLyricsSync";
 
 interface VideoPlayerProps {
   videoPath: string;
@@ -11,6 +12,8 @@ interface VideoPlayerProps {
   onVideoEnd?: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  lrcPath?: string | null;
+  trackPath?: string;
 }
 
 function formatTime(secs: number): string {
@@ -29,8 +32,11 @@ export default function VideoPlayer({
   onVideoEnd,
   onNext,
   onPrev,
+  lrcPath,
+  trackPath,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const bgVideoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -42,6 +48,29 @@ export default function VideoPlayer({
   const [audioSource, setAudioSource] = useState<"track" | "video">(
     hasLinkedAudio ? "track" : "video"
   );
+
+  const videoLyricsRef = useRef<HTMLDivElement>(null);
+  const [showLyrics, setShowLyrics] = useState(true);
+  const { lines: lyricsLines, currentLine: lyricsCurrentLine, seekToLine: lyricsSeekToLine } = useLyricsSync({
+    lrcPath: lrcPath ?? null,
+    trackPath: trackPath ?? "",
+    audioRef: audioRef ?? { current: null },
+    enabled: !!lrcPath && !!audioRef,
+  });
+  const hasLyrics = lyricsLines.length > 0;
+
+  useEffect(() => {
+    if (lyricsCurrentLine < 0 || !videoLyricsRef.current) return;
+    const container = videoLyricsRef.current;
+    const inner = container.querySelector(".video-lyrics-inner") as HTMLElement | null;
+    const activeLine = container.querySelector(".video-lyrics-line.active") as HTMLElement | null;
+    if (!inner || !activeLine) return;
+    const containerHeight = container.clientHeight;
+    const lineTop = activeLine.offsetTop;
+    const lineHeight = activeLine.offsetHeight;
+    const offset = lineTop - containerHeight / 2 + lineHeight / 2;
+    inner.style.transform = `translateY(${-offset}px)`;
+  }, [lyricsCurrentLine]);
 
   const [audioOffset, setAudioOffset] = useState(0);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
@@ -105,8 +134,13 @@ export default function VideoPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !resolvedPath) return;
-    video.src = convertFileSrc(resolvedPath);
+    const src = convertFileSrc(resolvedPath);
+    video.src = src;
     video.muted = audioSource === "track";
+    if (bgVideoRef.current) {
+      bgVideoRef.current.src = src;
+      bgVideoRef.current.muted = true;
+    }
 
     if (audioRef?.current && audioSource === "track") {
       const audio = audioRef.current;
@@ -212,6 +246,23 @@ export default function VideoPlayer({
       video.removeEventListener("error", onError);
     };
   }, [videoPath]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const bg = bgVideoRef.current;
+    if (!video || !bg) return;
+    const onPlay = () => { bg.currentTime = video.currentTime; bg.play().catch(() => {}); };
+    const onPause = () => bg.pause();
+    const onSeeked = () => { bg.currentTime = video.currentTime; };
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("seeked", onSeeked);
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("seeked", onSeeked);
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -349,6 +400,10 @@ export default function VideoPlayer({
         videoRef.current.pause();
         videoRef.current.src = "";
       }
+      if (bgVideoRef.current) {
+        bgVideoRef.current.pause();
+        bgVideoRef.current.src = "";
+      }
       if (audioRef?.current) {
         audioRef.current.muted = false;
       }
@@ -372,12 +427,32 @@ export default function VideoPlayer({
       onMouseMove={showControls}
       onTransitionEnd={handleTransitionEnd}
     >
-      <div className="video-player-bg" />
+      <video
+        ref={bgVideoRef}
+        className="video-player-bg-video"
+        muted
+        playsInline
+      />
       <video
         ref={videoRef}
         className="video-player-video"
         onClick={togglePlayPause}
       />
+      {hasLyrics && showLyrics && (
+        <div className="video-lyrics" ref={videoLyricsRef}>
+          <div className="video-lyrics-inner">
+            {lyricsLines.map((line, i) => (
+              <div
+                key={i}
+                className={`video-lyrics-line${i === lyricsCurrentLine ? " active" : ""}`}
+                onClick={() => lyricsSeekToLine(i)}
+              >
+                {line.text || "\u00A0"}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {loadError && (
         <div className="video-player-error">
           {loadError}
@@ -438,11 +513,10 @@ export default function VideoPlayer({
         </div>
       )}
       <div
-        className={`fs-controls video-player-controls${controlsVisible ? "" : " hidden"}`}
+        className={`vp-controls${controlsVisible ? "" : " hidden"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="fs-progress">
-          <span className="fs-time">{formatTime(currentTime)}</span>
+        <div className="vp-progress">
           <div className="video-progress-wrapper">
             <input
               type="range"
@@ -453,7 +527,7 @@ export default function VideoPlayer({
               onMouseDown={handleSeekStart}
               onChange={handleSeekChange}
               onMouseUp={handleSeekEnd}
-              className="fs-progress-slider"
+              className="vp-progress-slider"
               style={{ "--progress": `${progress}%` } as React.CSSProperties}
             />
             {hasLinkedAudio && audioOffset > 0 && duration > 0 && (
@@ -464,101 +538,89 @@ export default function VideoPlayer({
               />
             )}
           </div>
-          <span className="fs-time">{formatTime(duration)}</span>
         </div>
-        <div className="fs-buttons">
-          {onPrev && (
-            <button className="fs-btn" onClick={onPrev}>
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-              </svg>
-            </button>
-          )}
-          <button className="fs-btn fs-btn-play" onClick={togglePlayPause}>
-            {isPlaying ? (
-              <svg
-                viewBox="0 0 24 24"
-                width="36"
-                height="36"
-                fill="currentColor"
-              >
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-              </svg>
-            ) : (
-              <svg
-                viewBox="0 0 24 24"
-                width="36"
-                height="36"
-                fill="currentColor"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
+        <div className="vp-bar">
+          <div className="vp-left">
+            <span className="vp-time">{formatTime(currentTime)}</span>
+            <span className="vp-time-sep">/</span>
+            <span className="vp-time">{formatTime(duration)}</span>
+          </div>
+          <div className="vp-center">
+            {onPrev && (
+              <button className="vp-btn" onClick={onPrev}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                </svg>
+              </button>
             )}
-          </button>
-          {onNext && (
-            <button className="fs-btn" onClick={onNext}>
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-              </svg>
+            <button className="vp-btn vp-btn-play" onClick={togglePlayPause}>
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
             </button>
-          )}
-          {hasLinkedAudio && audioOffset !== 0 && (
-            <div className="video-offset-indicator">
-              {audioOffset > 0
-                ? `Song starts at ${audioOffset.toFixed(1)}s in video`
-                : `Song starts ${Math.abs(audioOffset).toFixed(1)}s before video`}
-            </div>
-          )}
-        </div>
-        <div className="fs-volume">
-          {hasLinkedAudio && (
-            <button
-              className={`fs-btn fs-btn-mode video-audio-toggle${audioSource === "video" ? " active" : ""}`}
-              onClick={toggleAudioSource}
-              title={
-                audioSource === "track"
-                  ? "Using audio file (high quality) — click for video audio"
-                  : "Using video audio — click for audio file (high quality)"
-              }
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="currentColor"
+            {onNext && (
+              <button className="vp-btn" onClick={onNext}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className="vp-right">
+            {hasLyrics && (
+              <button
+                className={`vp-btn vp-btn-toggle${showLyrics ? " active" : ""}`}
+                onClick={() => setShowLyrics((s) => !s)}
+                title={showLyrics ? "Hide lyrics" : "Show lyrics"}
               >
-                <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z" />
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                </svg>
+              </button>
+            )}
+            {hasLinkedAudio && (
+              <button
+                className={`vp-btn vp-btn-toggle${audioSource === "video" ? " active" : ""}`}
+                onClick={toggleAudioSource}
+                title={audioSource === "track" ? "Using audio file — click for video audio" : "Using video audio — click for audio file"}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z" />
+                </svg>
+              </button>
+            )}
+            {hasLinkedAudio && (
+              <button
+                className={`vp-btn vp-btn-toggle${showSyncPanel ? " active" : ""}`}
+                onClick={() => setShowSyncPanel((s) => !s)}
+                title="Audio sync offset"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
+                </svg>
+              </button>
+            )}
+            <div className="vp-vol">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
               </svg>
-            </button>
-          )}
-          {hasLinkedAudio && (
-            <button
-              className={`fs-btn fs-btn-mode${showSyncPanel ? " active" : ""}`}
-              onClick={() => setShowSyncPanel((s) => !s)}
-              title="Audio sync offset"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
-              </svg>
-            </button>
-          )}
-          <svg
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="currentColor"
-          >
-            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
-          </svg>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={volume}
-            onChange={handleVolumeChange}
-            className="fs-volume-slider"
-          />
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={volume}
+                onChange={handleVolumeChange}
+                className="vp-vol-slider"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

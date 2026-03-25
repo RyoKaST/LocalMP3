@@ -158,10 +158,14 @@ export default function FullscreenPlayer({
   useEffect(() => {
     if (currentLine < 0 || !lyricsContainerRef.current) return;
     const container = lyricsContainerRef.current;
-    const activeLine = container.querySelector(".fs-lyrics-line.active");
-    if (activeLine) {
-      activeLine.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    const inner = container.querySelector(".fs-lyrics-inner") as HTMLElement | null;
+    const activeLine = container.querySelector(".fs-lyrics-line.active") as HTMLElement | null;
+    if (!inner || !activeLine) return;
+    const containerHeight = container.clientHeight;
+    const lineTop = activeLine.offsetTop;
+    const lineHeight = activeLine.offsetHeight;
+    const offset = lineTop - containerHeight / 2 + lineHeight / 2;
+    inner.style.transform = `translateY(${-offset}px)`;
   }, [currentLine]);
 
   useEffect(() => {
@@ -255,15 +259,17 @@ export default function FullscreenPlayer({
     if (!hasLyrics || lines.length === 0) return null;
     return (
       <div className={`fs-lyrics ${className}`} ref={lyricsContainerRef}>
-        {lines.map((line, i) => (
-          <div
-            key={i}
-            className={`fs-lyrics-line${i === currentLine ? " active" : ""}`}
-            onClick={() => seekToLine(i)}
-          >
-            {line.text || "\u00A0"}
-          </div>
-        ))}
+        <div className="fs-lyrics-inner">
+          {lines.map((line, i) => (
+            <div
+              key={i}
+              className={`fs-lyrics-line${i === currentLine ? " active" : ""}`}
+              onClick={() => seekToLine(i)}
+            >
+              {line.text || "\u00A0"}
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
