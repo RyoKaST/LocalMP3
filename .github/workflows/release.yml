@@ -6,7 +6,44 @@ on:
       - 'v*'
 
 jobs:
-  release:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create draft release
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ github.ref_name }}',
+              name: 'LocalMP3 ${{ github.ref_name }}',
+              body: `## Download
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | **macOS (Apple Silicon)** | \`LocalMP3_*_aarch64.dmg\` | M1/M2/M3/M4 Macs |
+            | **macOS (Intel)** | \`LocalMP3_*_x64.dmg\` | Older Intel Macs |
+            | **Windows** | \`LocalMP3_*_x64-setup.exe\` | Recommended installer |
+            | **Linux (Debian/Ubuntu)** | \`LocalMP3_*_amd64.deb\` | \`sudo dpkg -i\` |
+            | **Linux (Fedora/RHEL)** | \`LocalMP3_*_x86_64.rpm\` | \`sudo rpm -i\` |
+            | **Linux (Other)** | \`LocalMP3_*_amd64.AppImage\` | Universal, no install needed |
+
+            > The \`.sig\` files are update signatures used by the auto-updater — you can ignore them.`,
+              draft: true,
+              prerelease: false
+            });
+            return data.id;
+
+  build:
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -101,19 +138,7 @@ jobs:
           projectPath: app
           tagName: ${{ github.ref_name }}
           releaseName: 'LocalMP3 ${{ github.ref_name }}'
-          releaseBody: |
-            ## Download
-
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | **macOS (Apple Silicon)** | `LocalMP3_*_aarch64.dmg` | M1/M2/M3/M4 Macs |
-            | **macOS (Intel)** | `LocalMP3_*_x64.dmg` | Older Intel Macs |
-            | **Windows** | `LocalMP3_*_x64-setup.exe` | Recommended installer |
-            | **Linux (Debian/Ubuntu)** | `LocalMP3_*_amd64.deb` | `sudo dpkg -i` |
-            | **Linux (Fedora/RHEL)** | `LocalMP3_*_x86_64.rpm` | `sudo rpm -i` |
-            | **Linux (Other)** | `LocalMP3_*_amd64.AppImage` | Universal, no install needed |
-
-            > The `.sig` files are update signatures used by the auto-updater — you can ignore them.
+          releaseBody: ''
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
