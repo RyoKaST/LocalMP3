@@ -55,6 +55,15 @@ export default function Sidebar({
           LRC Manager
         </button>
         <button
+          className={`sidebar-item ${currentView === "equalizer" ? "active" : ""}`}
+          onClick={() => onViewChange("equalizer")}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M10 20h4V4h-4v16zm-6-4h4V8H4v8zM16 9v7h4V9h-4z" />
+          </svg>
+          Equalizer
+        </button>
+        <button
           className={`sidebar-item ${currentView === "settings" ? "active" : ""}`}
           onClick={() => onViewChange("settings")}
         >

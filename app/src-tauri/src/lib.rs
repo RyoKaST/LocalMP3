@@ -59,6 +59,9 @@ struct AppData {
     /// tracks marked as having no lyrics
     #[serde(default)]
     no_lyrics: Vec<String>,
+    /// track_path -> EQ JSON string
+    #[serde(default)]
+    track_eq: std::collections::HashMap<String, String>,
 }
 
 impl Default for AppData {
@@ -72,6 +75,7 @@ impl Default for AppData {
             video_links: std::collections::HashMap::new(),
             video_offsets: std::collections::HashMap::new(),
             no_lyrics: vec![],
+            track_eq: std::collections::HashMap::new(),
         }
     }
 }
@@ -764,6 +768,19 @@ async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<Stri
     Ok(converted_path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn get_track_eq(app: tauri::AppHandle, track_path: String) -> Option<String> {
+    let data = load_data(&app);
+    data.track_eq.get(&track_path).cloned()
+}
+
+#[tauri::command]
+fn set_track_eq(app: tauri::AppHandle, track_path: String, eq: String) {
+    let mut data = load_data(&app);
+    data.track_eq.insert(track_path, eq);
+    save_data(&app, &data);
+}
+
 #[derive(Deserialize)]
 struct GithubAsset {
     name: String,
@@ -975,6 +992,8 @@ pub fn run() {
             get_converted_video,
             convert_video,
             install_version,
+            get_track_eq,
+            set_track_eq,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

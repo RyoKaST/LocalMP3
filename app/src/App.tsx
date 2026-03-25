@@ -7,6 +7,8 @@ import Player from "./components/Player";
 import EditTrackModal from "./components/EditTrackModal";
 import Settings, { type PlaylistDeleteBehavior, type LibraryClickBehavior, type FullscreenLayout, type FullscreenBackground, type FullscreenControls, type PrevButtonBehavior } from "./components/Settings";
 import LrcCreator from "./components/LrcCreator";
+import Equalizer from "./components/Equalizer";
+import { useEqualizer } from "./hooks/useEqualizer";
 import Lyrics from "./components/Lyrics";
 import FullscreenPlayer from "./components/FullscreenPlayer";
 const VideoPlayer = lazy(() => import("./components/VideoPlayer"));
@@ -60,6 +62,7 @@ function App() {
   const [currentTrackVideoPath, setCurrentTrackVideoPath] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoActiveRef = useRef(false);
+  const eq = useEqualizer(audioRef);
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
@@ -77,7 +80,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    audioRef.current = new Audio();
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    audioRef.current = audio;
     loadPlaylists();
     loadSavedLibrary();
     return () => {
@@ -97,6 +102,10 @@ function App() {
     root.style.setProperty("--accent-hover", accentColor);
     localStorage.setItem("accentColor", accentColor);
   }, [accentColor]);
+
+  useEffect(() => {
+    eq.loadTrackEq(currentTrack?.path ?? null);
+  }, [currentTrack?.path]);
 
   async function scanAllPaths(paths: string[]) {
     const allTracks: Track[] = [];
@@ -619,6 +628,19 @@ function App() {
       <main className="main-content">
         {currentView === "lrc-creator" ? (
           <LrcCreator tracks={tracks} onLrcLinked={handleLrcLinked} />
+        ) : currentView === "equalizer" ? (
+          <Equalizer
+            gains={eq.gains}
+            preamp={eq.preamp}
+            preset={eq.preset}
+            enabled={eq.enabled}
+            perTrack={eq.perTrack}
+            onBandChange={eq.setBandGain}
+            onPresetChange={eq.applyPreset}
+            onPreampChange={eq.setPreampValue}
+            onEnabledChange={eq.setEnabled}
+            onPerTrackChange={eq.setPerTrack}
+          />
         ) : currentView === "settings" ? (
           <Settings
             accentColor={accentColor}
