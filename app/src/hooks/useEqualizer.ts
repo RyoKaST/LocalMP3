@@ -66,7 +66,7 @@ export function useEqualizer(audioRef: React.RefObject<HTMLAudioElement | null>)
     if (!audio || connectedRef.current) return;
 
     try {
-      const ctx = new AudioContext();
+      const ctx = new AudioContext({ latencyHint: "playback" });
       const source = ctx.createMediaElementSource(audio);
       const filters = EQ_BANDS.map((freq) => {
         const f = ctx.createBiquadFilter();
@@ -92,33 +92,52 @@ export function useEqualizer(audioRef: React.RefObject<HTMLAudioElement | null>)
       sourceRef.current = source;
       connectedRef.current = true;
       setChainReady(true);
-
-      if (ctx.state === "suspended") {
-        ctx.resume();
-      }
     } catch (e) {
       console.error("EQ: failed to create audio chain", e);
     }
   }, [audioRef]);
 
   useEffect(() => {
+    let audio: HTMLAudioElement | null = null;
+
+    const onPlay = async () => {
+      if (!connectedRef.current) ensureChain();
+      const ctx = ctxRef.current;
+      if (ctx && ctx.state === "suspended") {
+        await ctx.resume();
+      }
+    };
+
     const check = setInterval(() => {
-      const audio = audioRef.current;
-      if (!audio) return;
+      if (!audioRef.current) return;
+      audio = audioRef.current;
       clearInterval(check);
-
-      ensureChain();
-
-      const onPlay = () => {
-        if (!connectedRef.current) ensureChain();
-        if (ctxRef.current?.state === "suspended") {
-          ctxRef.current.resume();
-        }
-      };
       audio.addEventListener("play", onPlay);
+      audio.addEventListener("seeking", onPlay);
     }, 50);
-    return () => clearInterval(check);
+
+    return () => {
+      clearInterval(check);
+      if (audio) {
+        audio.removeEventListener("play", onPlay);
+        audio.removeEventListener("seeking", onPlay);
+      }
+    };
   }, [audioRef, ensureChain]);
+
+  useEffect(() => {
+    const ctx = ctxRef.current;
+    const audio = audioRef.current;
+    if (!ctx || !audio) return;
+
+    const onStateChange = () => {
+      if (ctx.state === "suspended" && !audio.paused) {
+        ctx.resume();
+      }
+    };
+    ctx.addEventListener("statechange", onStateChange);
+    return () => ctx.removeEventListener("statechange", onStateChange);
+  }, [chainReady, audioRef]);
 
   useEffect(() => {
     if (!chainReady) return;

@@ -79,14 +79,37 @@ function App() {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
+  const prevBlobUrl = useRef<string | null>(null);
+
+  const setAudioSrc = useCallback(async (audio: HTMLAudioElement, path: string) => {
+    if (prevBlobUrl.current) {
+      URL.revokeObjectURL(prevBlobUrl.current);
+      prevBlobUrl.current = null;
+    }
+    try {
+      const buffer = await invoke<ArrayBuffer>("read_audio_file", { path });
+      const ext = path.split(".").pop()?.toLowerCase() ?? "";
+      const mimeMap: Record<string, string> = {
+        mp3: "audio/mpeg", flac: "audio/flac", ogg: "audio/ogg",
+        wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac", wma: "audio/x-ms-wma",
+      };
+      const blob = new Blob([buffer], { type: mimeMap[ext] || "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      prevBlobUrl.current = url;
+      audio.src = url;
+    } catch {
+      audio.src = convertFileSrc(path);
+    }
+  }, []);
+
   useEffect(() => {
     const audio = new Audio();
-    audio.crossOrigin = "anonymous";
     audioRef.current = audio;
     loadPlaylists();
     loadSavedLibrary();
     return () => {
       audioRef.current?.pause();
+      if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
     };
   }, []);
 
@@ -197,8 +220,9 @@ function App() {
     setPlaySource(source);
     setPlayingFromUserQueue(false);
 
-    audio.src = convertFileSrc(track.path);
-    audio.play().then(() => setIsPlaying(true)).catch(console.error);
+    setAudioSrc(audio, track.path).then(() => {
+      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+    });
   }
 
   useEffect(() => {
@@ -232,8 +256,9 @@ function App() {
       setUserQueue((prev) => prev.slice(1));
       setCurrentTrack(next);
       setPlayingFromUserQueue(true);
-      audio.src = convertFileSrc(next.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      setAudioSrc(audio, next.path).then(() => {
+        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      });
       return;
     }
 
@@ -248,20 +273,23 @@ function App() {
       const newIdx = queue.findIndex((t) => t.path === pick.path);
       setQueueIndex(newIdx);
       setCurrentTrack(pick);
-      audio.src = convertFileSrc(pick.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      setAudioSrc(audio, pick.path).then(() => {
+        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      });
     } else if (queueIndex < queue.length - 1) {
       const next = queue[queueIndex + 1];
       setQueueIndex(queueIndex + 1);
       setCurrentTrack(next);
-      audio.src = convertFileSrc(next.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      setAudioSrc(audio, next.path).then(() => {
+        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      });
     } else if (repeat === "all") {
       const next = queue[0];
       setQueueIndex(0);
       setCurrentTrack(next);
-      audio.src = convertFileSrc(next.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      setAudioSrc(audio, next.path).then(() => {
+        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      });
     } else {
       setIsPlaying(false);
     }
@@ -282,14 +310,16 @@ function App() {
       const prev = queue[queueIndex - 1];
       setQueueIndex(queueIndex - 1);
       setCurrentTrack(prev);
-      audio.src = convertFileSrc(prev.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      setAudioSrc(audio, prev.path).then(() => {
+        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      });
     } else if (repeat === "all") {
       const prev = queue[queue.length - 1];
       setQueueIndex(queue.length - 1);
       setCurrentTrack(prev);
-      audio.src = convertFileSrc(prev.path);
-      audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      setAudioSrc(audio, prev.path).then(() => {
+        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      });
     }
   }
 

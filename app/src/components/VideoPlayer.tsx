@@ -396,16 +396,14 @@ export default function VideoPlayer({
 
   const handleTransitionEnd = useCallback(() => {
     if (isClosing) {
+      if (audioRef?.current) {
+        audioRef.current.muted = false;
+      }
       if (videoRef.current) {
         videoRef.current.pause();
-        videoRef.current.src = "";
       }
       if (bgVideoRef.current) {
         bgVideoRef.current.pause();
-        bgVideoRef.current.src = "";
-      }
-      if (audioRef?.current) {
-        audioRef.current.muted = false;
       }
       onClose();
     }

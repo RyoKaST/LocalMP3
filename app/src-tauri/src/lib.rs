@@ -769,6 +769,12 @@ async fn convert_video(app: tauri::AppHandle, video_path: String) -> Result<Stri
 }
 
 #[tauri::command]
+fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = fs::read(&path).map_err(|e| format!("Failed to read {}: {}", path, e))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
 fn get_track_eq(app: tauri::AppHandle, track_path: String) -> Option<String> {
     let data = load_data(&app);
     data.track_eq.get(&track_path).cloned()
@@ -992,6 +998,7 @@ pub fn run() {
             get_converted_video,
             convert_video,
             install_version,
+            read_audio_file,
             get_track_eq,
             set_track_eq,
         ])
